@@ -50,12 +50,11 @@ void WavemapObstacleFilter::update(const wavemap::HashedWaveletOctree& map,
   tree_height_ = map.getTreeHeight();
   constexpr FloatingPoint kNumericalNoise = 1e-3f;
   min_log_odds_shrunk_ = map.getMinLogOdds() + kNumericalNoise;
-    double max_block_distance = maxRangeForHeight(6);
+  double max_block_distance = maxRangeForHeight(6);
 
-    if(use_only_lowest_level_){
-        max_block_distance = lowest_level_radius_;
-    }
-
+  if (use_only_lowest_level_) {
+    max_block_distance = lowest_level_radius_;
+  }
 
   // Reset counters
   function_evals_ = 0;
@@ -86,7 +85,7 @@ void WavemapObstacleFilter::update(const wavemap::HashedWaveletOctree& map,
     }
 
     // Extract obstacles at the appropriate resolution
-   if (use_only_lowest_level_) {
+    if (use_only_lowest_level_) {
       // All at highest available (leaf) resolution
       leafObstacleFilter(block_idx, block, robot_position);
     } else {
@@ -97,18 +96,18 @@ void WavemapObstacleFilter::update(const wavemap::HashedWaveletOctree& map,
   }
 
   // Print debug info
- /* size_t num_policies = 0;
-  for (int i = 0; i <= tree_height_; ++i) {
-    std::cout << "EVAL\t"
-              << "LEVEL" << i << "\t"
-              << new_obstacle_cells_.data.centers[i].size() << std::endl;
-    num_policies += new_obstacle_cells_.data.centers[i].size();
-  }
-  std::cout << "EVAL\t"
-            << "TOTAL\t" << num_policies << std::endl;
-  std::cout << "EVAL\t"
-            << "FUNC\t" << function_evals_ << std::endl;
-*/
+  /* size_t num_policies = 0;
+   for (int i = 0; i <= tree_height_; ++i) {
+     std::cout << "EVAL\t"
+               << "LEVEL" << i << "\t"
+               << new_obstacle_cells_.data.centers[i].size() << std::endl;
+     num_policies += new_obstacle_cells_.data.centers[i].size();
+   }
+   std::cout << "EVAL\t"
+             << "TOTAL\t" << num_policies << std::endl;
+   std::cout << "EVAL\t"
+             << "FUNC\t" << function_evals_ << std::endl;
+ */
   // Indicate that the new obstacle array is ready
   new_obstacle_cells_.ready = true;
 }
@@ -116,20 +115,22 @@ void WavemapObstacleFilter::update(const wavemap::HashedWaveletOctree& map,
 void WavemapObstacleFilter::leafObstacleFilter(
     const HashedWaveletOctreeBlock::BlockIndex& block_index,
     const HashedWaveletOctreeBlock& block, Point3D robot_pos) {
-  block.forEachLeaf(block_index, [robot_pos_l = robot_pos, occupancy_threshold = occupancy_threshold_,
-                                  min_cell_width = min_cell_width_,
-                                  &new_obstacle_cells =
-                                      new_obstacle_cells_.data,
-          lowest_level_radius= lowest_level_radius_](
-                                     const OctreeIndex& node_index,
-                                     FloatingPoint node_occupancy) {
-    if (occupancy_threshold < node_occupancy) {
-      const Point3D node_center =
-          wavemap::convert::nodeIndexToCenterPoint(node_index, min_cell_width);
-      if((node_center-robot_pos_l).norm()<lowest_level_radius){
-      new_obstacle_cells.centers[node_index.height].emplace_back(node_center);}
-    }
-  });
+  block.forEachLeaf(
+      block_index,
+      [robot_pos_l = robot_pos, occupancy_threshold = occupancy_threshold_,
+       min_cell_width = min_cell_width_,
+       &new_obstacle_cells = new_obstacle_cells_.data,
+       lowest_level_radius = lowest_level_radius_](
+          const OctreeIndex& node_index, FloatingPoint node_occupancy) {
+        if (occupancy_threshold < node_occupancy) {
+          const Point3D node_center = wavemap::convert::nodeIndexToCenterPoint(
+              node_index, min_cell_width);
+          if ((node_center - robot_pos_l).norm() < lowest_level_radius) {
+            new_obstacle_cells.centers[node_index.height].emplace_back(
+                node_center);
+          }
+        }
+      });
 }
 
 void WavemapObstacleFilter::adaptiveObstacleFilter(  // NOLINT
@@ -152,9 +153,8 @@ void WavemapObstacleFilter::adaptiveObstacleFilter(  // NOLINT
 
   // Check if we reached the max resolution given the node's distance
   const FloatingPoint d_robot_node = (node_center - robot_position).norm();
-  //const int min_height_at_range = minHeightForRange(d_robot_node);
-  double maxRange  = maxRangeForHeight(node_index.height);
-
+  // const int min_height_at_range = minHeightForRange(d_robot_node);
+  double maxRange = maxRangeForHeight(node_index.height);
 
   if (d_robot_node > maxRange) {
     // Add the node as an obstacle if the node itself or

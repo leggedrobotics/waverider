@@ -42,8 +42,7 @@ WaveriderServer::WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private,
       "toggle_levels", &WaveriderServer::toggleServiceCallback, this);
 }
 
-void WaveriderServer::updateMap(
-    const wavemap::MapBase& map) {
+void WaveriderServer::updateMap(const wavemap::MapBase& map) {
   ZoneScoped;
 
   // Get the world state

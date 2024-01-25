@@ -1,18 +1,21 @@
+#include <chomp_ros/chomp_eval_planner.h>
 #include <gflags/gflags.h>
+#include <visualization_msgs/MarkerArray.h>
+#include <wavemap/utils/query/collision_utils.h>
+#include <wavemap/utils/query/map_interpolator.h>
+#include <wavemap/utils/sdf/full_euclidean_sdf_generator.h>
+#include <wavemap_io/file_conversions.h>
 #include <wavemap_ros/wavemap_server.h>
 
 #include "waverider_eval/waverider_evaluator.h"
-#include <wavemap_io/file_conversions.h>
-#include <wavemap/utils/esdf/collision_utils.h>
-#include <wavemap/utils/esdf/esdf_generator.h>
-#include <wavemap/utils/interpolation_utils.h>
-#include <visualization_msgs/MarkerArray.h>
-#include <chomp_ros/chomp_eval_planner.h>
+
 ros::Publisher trajectory_pub;
 ros::Publisher esdf_pub;
 
 int traject_id = 0;
-void publishTrajectory(std::vector<Eigen::Vector3d>& trajectory, std::vector<Eigen::Vector3d>& colors, std::string name){
+void publishTrajectory(std::vector<Eigen::Vector3d>& trajectory,
+                       std::vector<Eigen::Vector3d>& colors,
+                       const std::string& name) {
   visualization_msgs::Marker marker;
   marker.header.frame_id = "map";
   marker.header.stamp = ros::Time::now();
@@ -26,7 +29,7 @@ void publishTrajectory(std::vector<Eigen::Vector3d>& trajectory, std::vector<Eig
   marker.pose.orientation.w = 1.0;
   marker.ns = name;
 
-  for(int i=0; i< trajectory.size(); i+=1){
+  for (int i = 0; i < trajectory.size(); i += 1) {
     geometry_msgs::Point pt;
     pt.x = trajectory[i].x();
     pt.y = trajectory[i].y();
@@ -41,10 +44,7 @@ void publishTrajectory(std::vector<Eigen::Vector3d>& trajectory, std::vector<Eig
     marker.colors.push_back(clr);
   }
 
-
-
   trajectory_pub.publish(marker);
-
 }
 
 int main(int argc, char** argv) {
@@ -65,10 +65,9 @@ int main(int argc, char** argv) {
 
   // load map and ESDF
   std::string occupancy_file_path =
-      "/home/mpantic/Work/waverider/meps/newer_college_mine_10cm.wvmp";
-  wavemap::VolumetricDataStructureBase::Ptr occupancy_map;
+      "/home/victor/data/wavemaps/newer_college_mine_5cm.wvmp";
+  wavemap::MapBase::Ptr occupancy_map;
   wavemap::io::fileToMap(occupancy_file_path, occupancy_map);
-
 
   wavemap::HashedBlocks::Ptr esdf;
   const std::filesystem::path esdf_file_path =
@@ -76,7 +75,7 @@ int main(int argc, char** argv) {
   if (std::filesystem::exists(esdf_file_path)) {
     // Load the ESDF
     LOG(INFO) << "Loading ESDF from path: " << esdf_file_path;
-    wavemap::VolumetricDataStructureBase::Ptr esdf_tmp;
+    wavemap::MapBase::Ptr esdf_tmp;
     if (!wavemap::io::fileToMap(esdf_file_path, esdf_tmp)) {
       LOG(ERROR) << "Could not load ESDF";
       return EXIT_FAILURE;
@@ -98,7 +97,8 @@ int main(int argc, char** argv) {
       return EXIT_FAILURE;
     }
     esdf = std::make_shared<wavemap::HashedBlocks>(
-        generateEsdf(*hashed_map, kOccupancyThreshold, kMaxDistance));
+        wavemap::FullEuclideanSDFGenerator{kMaxDistance, kOccupancyThreshold}
+            .generate(*hashed_map));
 
     // Save the ESDF
     LOG(INFO) << "Saving ESDF to path: " << esdf_file_path;
@@ -124,46 +124,43 @@ int main(int argc, char** argv) {
   auto* planner_chomp = new ChompEvalPlanner(occupancy_map, esdf);
   planner_chomp->color = {0.5, 0.5, 0.0};
   planner_waverider->loadMap(occupancy_file_path);
-  planner_waverider->color = {1.0, 0,0 };
+  planner_waverider->color = {1.0, 0, 0};
   planner_waverider_1->loadMap(occupancy_file_path);
-  planner_waverider_1->color = {0.0, 1.0,0 };
+  planner_waverider_1->color = {0.0, 1.0, 0};
 
-  planner_waverider_3->color = {0.0, 0,1.0 };
+  planner_waverider_3->color = {0.0, 0, 1.0};
   planner_waverider_3->loadMap(occupancy_file_path);
   planners.push_back(planner_chomp);
   planners.push_back(planner_waverider);
   planners.push_back(planner_waverider_1);
   planners.push_back(planner_waverider_3);
 
-  constexpr float kOccupancyThreshold =-0.1;
+  constexpr float kOccupancyThreshold = -0.1;
 
   auto distance_getter = [&occupancy_map,
                           &esdf](const Eigen::Vector3d& position_d) {
-    const wavemap::Point3D position =
-        position_d.cast<wavemap::FloatingPoint>();
-    return wavemap::interpolateTrilinear(*esdf, position);
+    const wavemap::Point3D position = position_d.cast<wavemap::FloatingPoint>();
+    return wavemap::interpolate::trilinear(*esdf, position);
   };
 
   for (int i = 0; i < 500; ++i) {
     double dist = 10000;
     Eigen::Vector3d start_3d, goal_3d;
 
-    while(dist > 30.0 || dist < 5.0) {
+    while (dist > 30.0 || dist < 5.0) {
       wavemap::AABB<wavemap::Point3D> bounding_start;
       bounding_start.max = {18.8, 3, 4};
       bounding_start.min = {-2.5, -12.5, -3};
 
-      const auto start =
-          wavemap::getCollisionFreePosition(*occupancy_map, *esdf, 1,bounding_start);
-      const auto goal =
-          wavemap::getCollisionFreePosition(*occupancy_map, *esdf, 1,bounding_start);
+      const auto start = wavemap::getCollisionFreePosition(
+          *occupancy_map, *esdf, 1, bounding_start);
+      const auto goal = wavemap::getCollisionFreePosition(*occupancy_map, *esdf,
+                                                          1, bounding_start);
 
-      if(start && goal){
-
-        dist = (start.value() -goal.value()).norm();
+      if (start && goal) {
+        dist = (start.value() - goal.value()).norm();
         start_3d = start.value().cast<double>();
         goal_3d = goal.value().cast<double>();
-
       }
     }
 
@@ -198,14 +195,13 @@ int main(int argc, char** argv) {
       trajectory_pub.publish(marker);
     }
 
-
     for (auto planner : planners) {
-      auto result = planner->plan(start_3d,goal_3d);
+      auto result = planner->plan(start_3d, goal_3d);
       // check goal distance
-      double goal_dist = (result.states_out.back()-goal_3d).norm();
+      double goal_dist = (result.states_out.back() - goal_3d).norm();
 
-      const auto log_file_path =
-          "/tmp/waverider_run_" +planner->getName() + std::to_string(i)+"_"+"_.log";
+      const auto log_file_path = "/tmp/waverider_run_" + planner->getName() +
+                                 std::to_string(i) + "_" + "_.log";
       std::ofstream log_file_ostream(
           log_file_path, std::ofstream::out | std::ofstream::binary);
       if (!log_file_ostream.is_open()) {
@@ -226,26 +222,28 @@ int main(int argc, char** argv) {
 
         colors[idx].setZero();
         colors[idx] = planner->color;
-        if(goal_dist > 0.1){
+        if (goal_dist > 0.1) {
           colors[idx] *= 0.5;
         }
 
         // Check if we collided
         if (esdf_distance <= 0.25) {
-          std::cout << "FAIL " << planner->getName() << "\t" <<position.transpose() << "\t" << esdf_distance <<std::endl;
+          std::cout << "FAIL " << planner->getName() << "\t"
+                    << position.transpose() << "\t" << esdf_distance
+                    << std::endl;
           is_collision_free = false;
           colors[idx] *= 0.5;
         }
       }
       log_file_ostream.close();
 
-      std::cout << "EVAL " << planner->getName()+"_" + std::to_string(i) << "\t" << result.success << "\t"
-                << ((double)result.duration.count())/1e9 << "\t" << result.states_out.size() << "\t" << goal_dist
-                <<  "\t" << is_collision_free<<  std::endl;
+      std::cout << "EVAL " << planner->getName() + "_" + std::to_string(i)
+                << "\t" << result.success << "\t"
+                << static_cast<double>(result.duration.count()) / 1e9 << "\t"
+                << result.states_out.size() << "\t" << goal_dist << "\t"
+                << is_collision_free << std::endl;
 
-
-        publishTrajectory(result.states_out, colors, planner->getName());
-
+      publishTrajectory(result.states_out, colors, planner->getName());
     }
   }
   return 0;

@@ -1,9 +1,11 @@
-#ifndef WAVERIDER_ROS_WAVERIDER_EVALUATOR_H_
-#define WAVERIDER_ROS_WAVERIDER_EVALUATOR_H_
+#ifndef WAVERIDER_EVAL_WAVERIDER_EVALUATOR_H_
+#define WAVERIDER_EVAL_WAVERIDER_EVALUATOR_H_
 
 #include <string>
 #include <thread>
 
+#include <rmpcpp/eval/integrator.h>
+#include <rmpcpp/policies/simple_target_policy.h>
 #include <ros/ros.h>
 #include <std_srvs/Empty.h>
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
@@ -11,24 +13,21 @@
 #include <wavemap_ros/tf_transformer.h>
 #include <waverider/eval_planner.h>
 #include <waverider/waverider_policy.h>
-#include <rmpcpp/policies/simple_target_policy.h>
-#include <rmpcpp/eval/integrator.h>
 
 namespace waverider {
-struct WaveriderEvaluatorConfig : wavemap::ConfigBase<WaveriderEvaluatorConfig, 1> {
-    std::string hans;
-
+struct WaveriderEvaluatorConfig
+    : wavemap::ConfigBase<WaveriderEvaluatorConfig, 1> {
+  std::string hans;
 
   static MemberMap memberMap;
 
   bool isValid(bool verbose) const override;
 };
 
-
 class WaveriderEvaluator : public waverider::EvalPlanner {
  public:
-
-    WaveriderEvaluator(const WaveriderEvaluatorConfig& config,  bool flat_res, double flat_res_radius = 0.0);
+  WaveriderEvaluator(const WaveriderEvaluatorConfig& config, bool flat_res,
+                     double flat_res_radius = 0.0);
 
   void loadMap(std::string path);
   void setTuning(/*whatever the hell we input here*/);
@@ -36,12 +35,12 @@ class WaveriderEvaluator : public waverider::EvalPlanner {
 
   void publishState(Eigen::Vector3d pos, Eigen::Vector3d vel);
 
-  inline std::string getName(){
+  inline std::string getName() {
     std::string name = "WAVE";
 
-    if(flat_res_){
+    if (flat_res_) {
       name += "FR";
-      name+= std::to_string((int)std::round(flat_res_radius_));
+      name += std::to_string(static_cast<int>(std::round(flat_res_radius_)));
     }
     return name;
   }
@@ -57,8 +56,7 @@ class WaveriderEvaluator : public waverider::EvalPlanner {
   wavemap::HashedWaveletOctree::Ptr map_;
 
   size_t max_integration_steps_{10000};
-
 };
 }  // namespace waverider
 
-#endif  // WAVERIDER_ROS_WAVERIDER_EVALUATOR_H_
+#endif  // WAVERIDER_EVAL_WAVERIDER_EVALUATOR_H_

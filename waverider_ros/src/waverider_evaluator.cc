@@ -1,6 +1,4 @@
 #include "waverider_eval/waverider_evaluator.h"
-#include <wavemap_io/file_conversions.h>
-#include <wavemap_ros_conversions/map_msg_conversions.h>
 
 #include <omav_msgs/conversions.h>
 #include <omav_msgs/eigen_omav_msgs.h>
@@ -8,9 +6,11 @@
 #include <tracy/Tracy.hpp>
 #include <visualization_msgs/MarkerArray.h>
 #include <wavemap/config/param.h>
-#include <wavemap_ros_conversions/config_conversions.h>
 #include <wavemap/utils/stopwatch.h>
+#include <wavemap_io/file_conversions.h>
 #include <wavemap_msgs/Map.h>
+#include <wavemap_ros_conversions/config_conversions.h>
+#include <wavemap_ros_conversions/map_msg_conversions.h>
 
 #include "waverider_ros/policy_visuals.h"
 
@@ -26,38 +26,40 @@ bool WaveriderEvaluatorConfig::isValid(bool verbose) const {
   return all_valid;
 }
 
-void WaveriderEvaluator::publishState(Eigen::Vector3d pos, Eigen::Vector3d vel){
-    nav_msgs::Odometry msg;
-    msg.header.frame_id = "map";
-    msg.child_frame_id = "rmp_state";
-    msg.pose.pose.position.x = pos.x();
-    msg.pose.pose.position.y = pos.y();
-    msg.pose.pose.position.z = pos.z();
+void WaveriderEvaluator::publishState(Eigen::Vector3d pos,
+                                      Eigen::Vector3d vel) {
+  nav_msgs::Odometry msg;
+  msg.header.frame_id = "map";
+  msg.child_frame_id = "rmp_state";
+  msg.pose.pose.position.x = pos.x();
+  msg.pose.pose.position.y = pos.y();
+  msg.pose.pose.position.z = pos.z();
 
-    debug_pub_odom_.publish(msg);
-
+  debug_pub_odom_.publish(msg);
 }
-WaveriderEvaluator::WaveriderEvaluator(const WaveriderEvaluatorConfig& config, bool flat_res, double flat_res_radius)
-    : config_(config.checkValid()), flat_res_(flat_res), flat_res_radius_{flat_res_radius} {
+WaveriderEvaluator::WaveriderEvaluator(const WaveriderEvaluatorConfig& config,
+                                       bool flat_res, double flat_res_radius)
+    : config_(config.checkValid()),
+      flat_res_(flat_res),
+      flat_res_radius_{flat_res_radius} {
   ros::NodeHandle nh;
-  debug_pub_ = nh.advertise<visualization_msgs::MarkerArray>(
-      "filtered_obstacles", 1);
+  debug_pub_ =
+      nh.advertise<visualization_msgs::MarkerArray>("filtered_obstacles", 1);
 
-  debug_pub_odom_ = nh.advertise<nav_msgs::Odometry>(
-      "rmp_state", 1);
+  debug_pub_odom_ = nh.advertise<nav_msgs::Odometry>("rmp_state", 1);
 
   map_pub_ = nh.advertise<wavemap_msgs::Map>("map", 1, true);
 }
 
 void WaveriderEvaluator::loadMap(std::string path) {
   wavemap::VolumetricDataStructureBase::Ptr map_ptr;
-  if(!wavemap::io::fileToMap(path, map_ptr)){
+  if (!wavemap::io::fileToMap(path, map_ptr)) {
     LOG(FATAL) << "MAP NOT LOADED";
   }
   map_ = std::dynamic_pointer_cast<wavemap::HashedWaveletOctree>(map_ptr);
   LOG(INFO) << "Map " << path << " loaded.";
 
-  wavemap_msgs::Map  map_msg;
+  wavemap_msgs::Map map_msg;
   wavemap::convert::mapToRosMsg(*map_ptr, "map", ros::Time::now(), map_msg);
   map_pub_.publish(map_msg);
 }
@@ -74,10 +76,10 @@ WaveriderEvaluator::Result WaveriderEvaluator::plan(Eigen::Vector3d start,
   rmpcpp::SimpleTargetPolicy<rmpcpp::Space<3>> target_policy;
   target_policy.setTuning(10, 15, 0.01);
   target_policy.setTarget(end);
-  target_policy.setA(Eigen::Matrix3d::Identity()*10);
+  target_policy.setA(Eigen::Matrix3d::Identity() * 10);
 
   WaveriderPolicy waverider_policy;
-  if(flat_res_){
+  if (flat_res_) {
     waverider_policy.run_all_levels_ = false;
     waverider_policy.obstacle_filter_.lowest_level_radius_ = flat_res_radius_;
     waverider_policy.obstacle_filter_.use_only_lowest_level_ = true;
@@ -86,41 +88,32 @@ WaveriderEvaluator::Result WaveriderEvaluator::plan(Eigen::Vector3d start,
 
   rmpcpp::TrapezoidalIntegrator<rmpcpp::State<3>> integrator(start_r3, 0.01);
   Eigen::Vector3d last_updated_pos = {-10000.0, -10000.0, -10000.0};
-  int i =0;
+  int i = 0;
   // lambda to make victor happy
   // tiny bit more efficient -> victor only slightly angry/disappointed.
   auto policy_sum = [&](const rmpcpp::State<3>& state) {
-
     trajectory.push_back(state.pos_);
 
     // update obstacles at current position
 
-
-
-
     // sum policies
-    if((last_updated_pos - state.pos_).norm() > 0.1) {
-     waverider_policy.updateObstacles(*map_, state.pos_.cast<float>());
-     //visualization_msgs::MarkerArray marker_array;
-      //addFilteredObstaclesToMarkerArray(waverider_policy.getObstacleCells(),"map", marker_array);
-     // debug_pub_.publish(marker_array);
+    if ((last_updated_pos - state.pos_).norm() > 0.1) {
+      waverider_policy.updateObstacles(*map_, state.pos_.cast<float>());
+      // visualization_msgs::MarkerArray marker_array;
+      // addFilteredObstaclesToMarkerArray(waverider_policy.getObstacleCells(),"map",
+      // marker_array);
+      // debug_pub_.publish(marker_array);
       last_updated_pos = state.pos_;
     }
 
-
     publishState(state.pos_, state.vel_);
 
-
-    auto waverider_result =waverider_policy.evaluateAt(state);
+    auto waverider_result = waverider_policy.evaluateAt(state);
     auto target_result = target_policy.evaluateAt(state);
 
-
-
     // return
-    return (target_result+waverider_result).f_;
+    return (target_result + waverider_result).f_;
   };
-
-
 
   WaveriderEvaluator::Result planning_result;
   wavemap::Stopwatch watch;
@@ -132,7 +125,9 @@ WaveriderEvaluator::Result WaveriderEvaluator::plan(Eigen::Vector3d start,
   planning_result.success = got_to_rest;
   planning_result.states_out = trajectory;
 
-  planning_result.duration = std::chrono::duration_cast< std::chrono::steady_clock::duration>(std::chrono::duration<double>(watch.getLastEpisodeDuration()));
+  planning_result.duration =
+      std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+          std::chrono::duration<double>(watch.getLastEpisodeDuration()));
   return planning_result;
 }
 

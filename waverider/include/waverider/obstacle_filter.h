@@ -39,17 +39,17 @@ class WavemapObstacleFilter {
   const ObstacleCells& getObstacleCells();
 
   bool use_only_lowest_level_ = false;
-  double lowest_level_radius_ {3.0};
-    static double maxRangeForHeight(int level) {
+  double lowest_level_radius_{3.0};
+  static double maxRangeForHeight(int level) {
+    return std::pow(3, level / 3.0) - 0.25;
+    // return std::exp((level + 1.0) / 2.0);
+  }
 
-        return std::pow(3,level/3.0)-0.25;
-        // return std::exp((level + 1.0) / 2.0);
-    }
  private:
   using HashedWaveletOctreeBlock = wavemap::HashedWaveletOctreeBlock;
 
   size_t function_evals_ = 0;
-  FloatingPoint occupancy_threshold_ =-0.1;
+  FloatingPoint occupancy_threshold_ = -0.1;
 
   FloatingPoint min_cell_width_ = wavemap::kNaN;
   FloatingPoint min_log_odds_shrunk_ = wavemap::kNaN;
