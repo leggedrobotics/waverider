@@ -4,14 +4,15 @@
 #include <glog/logging.h>
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
-#include <wavemap/data_structure/volumetric/hashed_blocks.h>
-#include <wavemap/data_structure/volumetric/volumetric_data_structure_base.h>
-#include <wavemap/utils/esdf/collision_utils.h>
-#include <wavemap/utils/esdf/esdf_generator.h>
-#include <wavemap/utils/interpolation_utils.h>
+#include <wavemap/map/hashed_blocks.h>
+#include <wavemap/map/map_base.h>
+#include <wavemap/utils/query/collision_utils.h>
+#include <wavemap/utils/query/map_interpolator.h>
+#include <wavemap/utils/sdf/full_euclidean_sdf_generator.h>
 #include <wavemap_io/file_conversions.h>
 #include <wavemap_msgs/Map.h>
 #include <wavemap_ros_conversions/map_msg_conversions.h>
+
 #include "chomp_ros/chomp_eval_planner.h"
 #include "chomp_ros/chomp_optimizer.h"
 
@@ -45,7 +46,7 @@ int main(int argc, char** argv) {
   std::filesystem::create_directories(logging_dir);
 
   // Load the occupancy map
-  wavemap::VolumetricDataStructureBase::Ptr occupancy_map;
+  wavemap::MapBase::Ptr occupancy_map;
   wavemap::io::fileToMap(occupancy_file_path, occupancy_map);
   CHECK_NOTNULL(occupancy_map);
 
@@ -70,7 +71,7 @@ int main(int argc, char** argv) {
   if (std::filesystem::exists(esdf_file_path)) {
     // Load the ESDF
     LOG(INFO) << "Loading ESDF from path: " << esdf_file_path;
-    wavemap::VolumetricDataStructureBase::Ptr esdf_tmp;
+    wavemap::MapBase::Ptr esdf_tmp;
     if (!wavemap::io::fileToMap(esdf_file_path, esdf_tmp)) {
       LOG(ERROR) << "Could not load ESDF";
       return EXIT_FAILURE;
@@ -85,7 +86,8 @@ int main(int argc, char** argv) {
     LOG(INFO) << "Generating ESDF";
     constexpr float kMaxDistance = 2.f;
     esdf = std::make_shared<wavemap::HashedBlocks>(
-        generateEsdf(*hashed_map, kOccupancyThreshold, kMaxDistance));
+        wavemap::FullEuclideanSDFGenerator{kMaxDistance, kOccupancyThreshold}
+            .generate(*hashed_map));
 
     // Save the ESDF
     LOG(INFO) << "Saving ESDF to path: " << esdf_file_path;
@@ -104,9 +106,9 @@ int main(int argc, char** argv) {
   auto distance_getter = [&occupancy_map,
                           &esdf](const Eigen::Vector3d& position_d) {
     const wavemap::Point3D position = position_d.cast<wavemap::FloatingPoint>();
-    if (wavemap::interpolateTrilinear(*occupancy_map, position) <
+    if (wavemap::interpolate::trilinear(*occupancy_map, position) <
         kOccupancyThreshold) {
-      return wavemap::interpolateTrilinear(*esdf, position);
+      return wavemap::interpolate::trilinear(*esdf, position);
     } else {
       return 0.f;
     }

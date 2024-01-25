@@ -3,7 +3,7 @@
 
 #include <rmpcpp/core/policy_base.h>
 #include <rmpcpp/core/state.h>
-#include <wavemap/data_structure/volumetric/hashed_wavelet_octree.h>
+#include <wavemap/map/hashed_wavelet_octree.h>
 
 #include "waverider/parallelized_policy.h"
 

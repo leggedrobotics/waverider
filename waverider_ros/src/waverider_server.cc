@@ -43,7 +43,7 @@ WaveriderServer::WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private,
 }
 
 void WaveriderServer::updateMap(
-    const wavemap::VolumetricDataStructureBase& map) {
+    const wavemap::MapBase& map) {
   ZoneScoped;
 
   // Get the world state

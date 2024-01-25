@@ -70,7 +70,7 @@ void WavemapObstacleFilter::update(const wavemap::HashedWaveletOctree& map,
   }
 
   // Iterate over all blocks and extract obstacles
-  for (const auto& [block_idx, block] : map.getBlocks()) {
+  for (const auto& [block_idx, block] : map.getHashMap()) {
     // Skip empty blocks
     if (block.empty()) {
       continue;

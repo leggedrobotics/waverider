@@ -1,6 +1,8 @@
 #include "waverider/waverider_policy.h"
-#include "waverider/obstacle_filter.h"
+
 #include <tracy/Tracy.hpp>
+
+#include "waverider/obstacle_filter.h"
 
 namespace waverider {
 void WaveriderPolicy::updateObstacles(const wavemap::HashedWaveletOctree& map,

@@ -10,15 +10,15 @@
 #include <glog/logging.h>
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
-#include <wavemap/data_structure/volumetric/hashed_blocks.h>
-#include <wavemap/data_structure/volumetric/volumetric_data_structure_base.h>
-#include <wavemap/utils/esdf/collision_utils.h>
-#include <wavemap/utils/esdf/esdf_generator.h>
-#include <wavemap/utils/interpolation_utils.h>
+#include <wavemap/map/hashed_blocks.h>
+#include <wavemap/map/map_base.h>
+#include <wavemap/utils/query/map_interpolator.h>
+#include <wavemap/utils/sdf/full_euclidean_sdf_generator.h>
+#include <wavemap/utils/time/stopwatch.h>
 #include <wavemap_io/file_conversions.h>
 #include <wavemap_msgs/Map.h>
 #include <wavemap_ros_conversions/map_msg_conversions.h>
-#include <wavemap/utils/stopwatch.h>
+#include <waverider/eval_planner.h>
 
 #include "chomp_ros/chomp_optimizer.h"
 #include <waverider/eval_planner.h>
@@ -26,7 +26,7 @@
 class ChompEvalPlanner : public waverider::EvalPlanner{
 
 public:
-    ChompEvalPlanner( wavemap::VolumetricDataStructureBase::Ptr occupancy_map,
+    ChompEvalPlanner( wavemap::MapBase::Ptr occupancy_map,
     wavemap::HashedBlocks::Ptr esdf): occupancy_map_(occupancy_map),
     esdf_(esdf){
 
@@ -46,9 +46,9 @@ public:
         // Define the ESDF distance getter
         auto distance_getter = [&](const Eigen::Vector3d& position_d) {
             const wavemap::Point3D position = position_d.cast<wavemap::FloatingPoint>();
-            if (wavemap::interpolateTrilinear(*occupancy_map_, position) <
+            if (wavemap::interpolate::trilinear(*occupancy_map_, position) <
                 kOccupancyThreshold) {
-                return wavemap::interpolateTrilinear(*esdf_, position);
+                return wavemap::interpolate::trilinear(*esdf_, position);
             } else {
                 return 0.f;
             }
@@ -92,7 +92,7 @@ public:
       return result;
     }
 
-    wavemap::VolumetricDataStructureBase::Ptr occupancy_map_;
+    wavemap::MapBase::Ptr occupancy_map_;
     wavemap::HashedBlocks::Ptr esdf_;
 
 };

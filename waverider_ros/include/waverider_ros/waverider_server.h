@@ -8,7 +8,7 @@
 #include <std_srvs/Empty.h>
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
 #include <wavemap/config/config_base.h>
-#include <wavemap/data_structure/volumetric/volumetric_data_structure_base.h>
+#include <wavemap/map/map_base.h>
 #include <wavemap_ros/tf_transformer.h>
 #include <waverider/waverider_policy.h>
 
@@ -30,7 +30,7 @@ class WaveriderServer {
   WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private,
                   const WaveriderServerConfig& config);
 
-  void updateMap(const wavemap::VolumetricDataStructureBase& map);
+  void updateMap(const wavemap::MapBase& map);
 
   void startPlanningAsync();
   void stopPlanningAsync() {
