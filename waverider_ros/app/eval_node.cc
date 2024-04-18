@@ -1,8 +1,8 @@
 #include <chomp_ros/chomp_eval_planner.h>
 #include <gflags/gflags.h>
 #include <visualization_msgs/MarkerArray.h>
-#include <wavemap/utils/query/collision_utils.h>
 #include <wavemap/utils/query/map_interpolator.h>
+#include <wavemap/utils/query/point_sampler.h>
 #include <wavemap/utils/sdf/full_euclidean_sdf_generator.h>
 #include <wavemap_io/file_conversions.h>
 #include <wavemap_ros/wavemap_server.h>
@@ -69,6 +69,13 @@ int main(int argc, char** argv) {
   wavemap::MapBase::Ptr occupancy_map;
   wavemap::io::fileToMap(occupancy_file_path, occupancy_map);
 
+  constexpr float kRobotRadius = 1.f;
+  const auto hashed_map =
+      std::dynamic_pointer_cast<wavemap::HashedWaveletOctree>(occupancy_map);
+  if (!hashed_map) {
+    return EXIT_FAILURE;
+  }
+
   wavemap::HashedBlocks::Ptr esdf;
   const std::filesystem::path esdf_file_path =
       std::filesystem::path(occupancy_file_path).replace_extension("dwvmp");
@@ -90,12 +97,6 @@ int main(int argc, char** argv) {
     LOG(INFO) << "Generating ESDF";
     constexpr float kMaxDistance = 2.f;
     constexpr float kOccupancyThreshold = 0.0f;
-    constexpr float kRobotRadius = 1.f;
-    const auto hashed_map =
-        std::dynamic_pointer_cast<wavemap::HashedWaveletOctree>(occupancy_map);
-    if (!hashed_map) {
-      return EXIT_FAILURE;
-    }
     esdf = std::make_shared<wavemap::HashedBlocks>(
         wavemap::FullEuclideanSDFGenerator{kMaxDistance, kOccupancyThreshold}
             .generate(*hashed_map));
@@ -143,6 +144,12 @@ int main(int argc, char** argv) {
     return wavemap::interpolate::trilinear(*esdf, position);
   };
 
+  // Create a point sampler to get collision free points
+  const auto classified_map = std::make_shared<const wavemap::ClassifiedMap>(
+      *hashed_map, wavemap::OccupancyClassifier{kOccupancyThreshold}, *esdf,
+      kRobotRadius);
+  wavemap::PointSampler point_sampler{classified_map};
+
   for (int i = 0; i < 500; ++i) {
     double dist = 10000;
     Eigen::Vector3d start_3d, goal_3d;
@@ -152,10 +159,10 @@ int main(int argc, char** argv) {
       bounding_start.max = {18.8, 3, 4};
       bounding_start.min = {-2.5, -12.5, -3};
 
-      const auto start = wavemap::getCollisionFreePosition(
-          *occupancy_map, *esdf, 1, bounding_start);
-      const auto goal = wavemap::getCollisionFreePosition(*occupancy_map, *esdf,
-                                                          1, bounding_start);
+      const auto start = point_sampler.getRandomPoint(wavemap::Occupancy::kFree,
+                                                      bounding_start);
+      const auto goal = point_sampler.getRandomPoint(wavemap::Occupancy::kFree,
+                                                     bounding_start);
 
       if (start && goal) {
         dist = (start.value() - goal.value()).norm();

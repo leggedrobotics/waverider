@@ -6,8 +6,8 @@
 #include <visualization_msgs/MarkerArray.h>
 #include <wavemap/map/hashed_blocks.h>
 #include <wavemap/map/map_base.h>
-#include <wavemap/utils/query/collision_utils.h>
 #include <wavemap/utils/query/map_interpolator.h>
+#include <wavemap/utils/query/point_sampler.h>
 #include <wavemap/utils/sdf/full_euclidean_sdf_generator.h>
 #include <wavemap_io/file_conversions.h>
 #include <wavemap_msgs/Map.h>
@@ -127,6 +127,12 @@ int main(int argc, char** argv) {
   chomp.setParameters(params);
   chomp.setDistanceFunction(distance_getter);
 
+  // Create a point sampler to get collision free points
+  const auto classified_map = std::make_shared<const wavemap::ClassifiedMap>(
+      *hashed_map, wavemap::OccupancyClassifier{kOccupancyThreshold}, *esdf,
+      kRobotRadius);
+  wavemap::PointSampler point_sampler{classified_map};
+
   // Loop forever (for debugging)
   size_t run_idx = 0u;
   while (true) {
@@ -140,10 +146,9 @@ int main(int argc, char** argv) {
       }
 
       // Get random start and goal positions
-      const auto start = wavemap::getCollisionFreePosition(*occupancy_map,
-                                                           *esdf, kRobotRadius);
-      const auto goal = wavemap::getCollisionFreePosition(*occupancy_map, *esdf,
-                                                          kRobotRadius);
+      const auto start =
+          point_sampler.getRandomPoint(wavemap::Occupancy::kFree);
+      const auto goal = point_sampler.getRandomPoint(wavemap::Occupancy::kFree);
       if (!start || !goal) {
         LOG(ERROR) << "Could not find collision free start and goal positions";
         return EXIT_FAILURE;

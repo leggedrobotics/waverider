@@ -6,7 +6,7 @@
 #include <tracy/Tracy.hpp>
 #include <visualization_msgs/MarkerArray.h>
 #include <wavemap/config/param.h>
-#include <wavemap/utils/stopwatch.h>
+#include <wavemap/utils/time/stopwatch.h>
 #include <wavemap_io/file_conversions.h>
 #include <wavemap_msgs/Map.h>
 #include <wavemap_ros_conversions/config_conversions.h>
@@ -52,7 +52,7 @@ WaveriderEvaluator::WaveriderEvaluator(const WaveriderEvaluatorConfig& config,
 }
 
 void WaveriderEvaluator::loadMap(std::string path) {
-  wavemap::VolumetricDataStructureBase::Ptr map_ptr;
+  wavemap::MapBase::Ptr map_ptr;
   if (!wavemap::io::fileToMap(path, map_ptr)) {
     LOG(FATAL) << "MAP NOT LOADED";
   }
@@ -86,12 +86,13 @@ WaveriderEvaluator::Result WaveriderEvaluator::plan(Eigen::Vector3d start,
   }
   std::vector<Eigen::Vector3d> trajectory;
 
-  rmpcpp::TrapezoidalIntegrator<rmpcpp::State<3>> integrator(start_r3, 0.01);
+  rmpcpp::TrapezoidalIntegrator<rmpcpp::State<3>> integrator{start_r3, 0.01};
   Eigen::Vector3d last_updated_pos = {-10000.0, -10000.0, -10000.0};
   int i = 0;
   // lambda to make victor happy
   // tiny bit more efficient -> victor only slightly angry/disappointed.
-  auto policy_sum = [&](const rmpcpp::State<3>& state) {
+  auto policy_sum =
+      [&](const rmpcpp::State<3>& state)  {
     trajectory.push_back(state.pos_);
 
     // update obstacles at current position
@@ -108,10 +109,10 @@ WaveriderEvaluator::Result WaveriderEvaluator::plan(Eigen::Vector3d start,
 
     publishState(state.pos_, state.vel_);
 
+
     auto waverider_result = waverider_policy.evaluateAt(state);
     auto target_result = target_policy.evaluateAt(state);
 
-    // return
     return (target_result + waverider_result).f_;
   };
 
