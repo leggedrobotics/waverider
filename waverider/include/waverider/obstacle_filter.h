@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-#include <wavemap/map/hashed_wavelet_octree.h>
+#include <wavemap/core/map/hashed_wavelet_octree.h>
 
 #include "waverider/common.h"
 

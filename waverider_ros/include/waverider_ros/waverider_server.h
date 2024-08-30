@@ -7,9 +7,9 @@
 #include <ros/ros.h>
 #include <std_srvs/Empty.h>
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
-#include <wavemap/config/config_base.h>
-#include <wavemap/map/map_base.h>
-#include <wavemap_ros/tf_transformer.h>
+#include <wavemap/core/config/config_base.h>
+#include <wavemap/core/map/map_base.h>
+#include <wavemap_ros/utils/tf_transformer.h>
 #include <waverider/waverider_policy.h>
 
 namespace waverider {

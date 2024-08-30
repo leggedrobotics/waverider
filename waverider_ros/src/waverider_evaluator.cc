@@ -3,11 +3,11 @@
 #include <omav_msgs/conversions.h>
 #include <omav_msgs/eigen_omav_msgs.h>
 #include <rmpcpp/geometry/partial_geometry.h>
-#include <tracy/Tracy.hpp>
 #include <visualization_msgs/MarkerArray.h>
-#include <wavemap/config/param.h>
-#include <wavemap/utils/time/stopwatch.h>
-#include <wavemap_io/file_conversions.h>
+#include <wavemap/core/config/param.h>
+#include <wavemap/core/utils/profiler_interface.h>
+#include <wavemap/core/utils/time/stopwatch.h>
+#include <wavemap/io/file_conversions.h>
 #include <wavemap_msgs/Map.h>
 #include <wavemap_ros_conversions/config_conversions.h>
 #include <wavemap_ros_conversions/map_msg_conversions.h>
@@ -91,8 +91,7 @@ WaveriderEvaluator::Result WaveriderEvaluator::plan(Eigen::Vector3d start,
   int i = 0;
   // lambda to make victor happy
   // tiny bit more efficient -> victor only slightly angry/disappointed.
-  auto policy_sum =
-      [&](const rmpcpp::State<3>& state)  {
+  auto policy_sum = [&](const rmpcpp::State<3>& state) {
     trajectory.push_back(state.pos_);
 
     // update obstacles at current position
@@ -108,7 +107,6 @@ WaveriderEvaluator::Result WaveriderEvaluator::plan(Eigen::Vector3d start,
     }
 
     publishState(state.pos_, state.vel_);
-
 
     auto waverider_result = waverider_policy.evaluateAt(state);
     auto target_result = target_policy.evaluateAt(state);

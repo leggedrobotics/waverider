@@ -1,18 +1,18 @@
 #include "waverider/waverider_policy.h"
 
-#include <tracy/Tracy.hpp>
+#include <wavemap/core/utils/profiler_interface.h>
 
 #include "waverider/obstacle_filter.h"
 
 namespace waverider {
 void WaveriderPolicy::updateObstacles(const wavemap::HashedWaveletOctree& map,
                                       const Point3D& robot_position) {
-  ZoneScoped;
+  ProfilerZoneScoped;
   obstacle_filter_.update(map, robot_position);
 }
 
 rmpcpp::PolicyValue<3> WaveriderPolicy::evaluateAt(const rmpcpp::State<3>& x) {
-  ZoneScoped;
+  ProfilerZoneScoped;
   if (!isReady()) {
     return {Eigen::Vector3d::Zero(), Eigen::Matrix3d::Zero()};
   }

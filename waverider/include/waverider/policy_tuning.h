@@ -3,13 +3,21 @@
 
 namespace waverider {
 struct PolicyTuning {
+  //! Overall activation of the policy
   float r = 1.3;
+  //! Soft max tuning
   float c = 0.2;
-  float eta_rep = 22;    // n
-  float nu_rep = 1.4;    // v
-  float eta_damp = 140;  // n
-  float nu_damp = 1.2;   // v
+  //! Repulsive gain > 0.0 (eq. symbol n)
+  float eta_rep = 22;
+  //! Positive length scale > 0.0 (eq. symbol v)
+  float nu_rep = 1.4;
+  //! Damping gain (eq. symbol n)
+  float eta_damp = 140;
+  //! Damping length scale > 0.0 (eq. symbol v)
+  float nu_damp = 1.2;
+  //! Whether to enable damping
   bool enable_damper = true;
+  //! Whether to enable repulsion
   bool enable_repulsor = true;
 };
 }  // namespace waverider

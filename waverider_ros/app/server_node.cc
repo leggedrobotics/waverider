@@ -1,7 +1,25 @@
 #include <gflags/gflags.h>
-#include <wavemap_ros/wavemap_server.h>
+#include <wavemap_ros/ros_server.h>
 
 #include "waverider_ros/waverider_server.h"
+
+class MapChangedCallbackOperation : public wavemap::MapOperationBase {
+ public:
+  using Callback = std::function<void(const wavemap::MapBase&)>;
+  MapChangedCallbackOperation(wavemap::MapBase::Ptr occupancy_map,
+                              Callback callback)
+      : wavemap::MapOperationBase(std::move(occupancy_map)),
+        callback_(std::move(callback)) {}
+
+  void run(bool /*force_run*/) override {
+    CHECK_NOTNULL(occupancy_map_);
+    CHECK_NOTNULL(callback_);
+    std::invoke(callback_, *occupancy_map_);
+  }
+
+ private:
+  Callback callback_;
+};
 
 int main(int argc, char** argv) {
   // Register with ROS
@@ -18,14 +36,14 @@ int main(int argc, char** argv) {
   // Create the mapper
   ros::CallbackQueue mapper_callback_queue;
   ros::AsyncSpinner mapper_spinner{1, &mapper_callback_queue};
-  std::unique_ptr<wavemap::WavemapServer> wavemap_server;
+  std::unique_ptr<wavemap::RosServer> wavemap_server;
   {
     ros::NodeHandle nh_mapper;
     ros::NodeHandle nh_mapper_private{"~/mapper"};
     nh_mapper.setCallbackQueue(&mapper_callback_queue);
     nh_mapper_private.setCallbackQueue(&mapper_callback_queue);
     wavemap_server =
-        std::make_unique<wavemap::WavemapServer>(nh_mapper, nh_mapper_private);
+        std::make_unique<wavemap::RosServer>(nh_mapper, nh_mapper_private);
   }
 
   // Create the planner
@@ -42,14 +60,20 @@ int main(int argc, char** argv) {
   }
 
   // Subscribe waverider to wavemap map updates
-  wavemap_server->setMapUpdatedCallback(
-      [&waverider_server](const wavemap::MapBase& map) {
-        std::cout << "EVAL\t" << ros::Time::now()
-                  << "\tSTARTED obstacle cells update" << std::endl;
-        waverider_server->updateMap(map);
-        std::cout << "EVAL\t" << ros::Time::now()
-                  << "\tFINISHED obstacle cells update" << std::endl;
-      });
+  {
+    auto map_changed_callback_op =
+        std::make_unique<MapChangedCallbackOperation>(
+            wavemap_server->getMap(),
+            [&waverider_server](const wavemap::MapBase& map) {
+              std::cout << "EVAL\t" << ros::Time::now()
+                        << "\tSTARTED obstacle cells update" << std::endl;
+              waverider_server->updateMap(map);
+              std::cout << "EVAL\t" << ros::Time::now()
+                        << "\tFINISHED obstacle cells update" << std::endl;
+            });
+    wavemap_server->getPipeline().addOperation(
+        std::move(map_changed_callback_op));
+  }
 
   // Start processing inputs
   mapper_spinner.start();

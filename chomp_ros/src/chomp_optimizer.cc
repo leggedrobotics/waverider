@@ -3,7 +3,7 @@
 #include <iostream>
 
 #include <Eigen/Cholesky>
-#include <tracy/Tracy.hpp>
+#include <wavemap/core/utils/profiler_interface.h>
 
 // NOTE: This CHOMP implementation is borrowed from Helen's mav_local_avoidance:
 //       https://github.com/ethz-asl/mav_local_avoidance/blob/master/local_trajectory_opt/src/chomp/chomp_optimizer.cpp
@@ -168,12 +168,12 @@ void ChompOptimizer::getGradient(const ChompTrajectory& traj,
 
   Eigen::MatrixXd grad_smooth, grad_collision;
   {
-    ZoneScopedN("chomp/gradient_smooth");
+    ProfilerZoneScopedN("chomp/gradient_smooth");
     f_smooth_.getGradient(traj, &grad_smooth);
   }
 
   if (f_collision_.isInitialized()) {
-    ZoneScopedN("chomp/gradient_coll");
+    ProfilerZoneScopedN("chomp/gradient_coll");
     f_collision_.getGradient(traj, &grad_collision);
   } else {
     grad_collision.resize(grad_smooth.rows(), grad_smooth.cols());
@@ -191,13 +191,13 @@ double ChompOptimizer::getCost(const ChompTrajectory& traj) const {
   }
   double cost_smooth{};
   {
-    ZoneScopedN("chomp/cost_smooth");
+    ProfilerZoneScopedN("chomp/cost_smooth");
     cost_smooth = f_smooth_.getCost(traj);
   }
 
   double cost_collision = 0.0;
   if (f_collision_.isInitialized()) {
-    ZoneScopedN("chomp/cost_collision");
+    ProfilerZoneScopedN("chomp/cost_collision");
     cost_collision = f_collision_.getCost(traj);
   }
   double cost =
@@ -227,7 +227,7 @@ void ChompOptimizer::setupFromTrajectory(const ChompTrajectory& traj) {
 }
 
 void ChompOptimizer::doGradientDescent(ChompTrajectory* traj) {
-  ZoneScopedN("chomp/optimize");
+  ProfilerZoneScopedN("chomp/optimize");
 
   // TODO: fill in M.
   // Get initial cost and gradient.

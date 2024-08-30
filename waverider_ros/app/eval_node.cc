@@ -1,11 +1,11 @@
 #include <chomp_ros/chomp_eval_planner.h>
 #include <gflags/gflags.h>
 #include <visualization_msgs/MarkerArray.h>
-#include <wavemap/utils/query/map_interpolator.h>
-#include <wavemap/utils/query/point_sampler.h>
-#include <wavemap/utils/sdf/full_euclidean_sdf_generator.h>
-#include <wavemap_io/file_conversions.h>
-#include <wavemap_ros/wavemap_server.h>
+#include <wavemap/core/utils/query/map_interpolator.h>
+#include <wavemap/core/utils/query/point_sampler.h>
+#include <wavemap/core/utils/sdf/full_euclidean_sdf_generator.h>
+#include <wavemap/io/file_conversions.h>
+#include <wavemap_ros/ros_server.h>
 
 #include "waverider_eval/waverider_evaluator.h"
 

@@ -4,12 +4,12 @@
 #include <glog/logging.h>
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
-#include <wavemap/map/hashed_blocks.h>
-#include <wavemap/map/map_base.h>
-#include <wavemap/utils/query/map_interpolator.h>
-#include <wavemap/utils/query/point_sampler.h>
-#include <wavemap/utils/sdf/full_euclidean_sdf_generator.h>
-#include <wavemap_io/file_conversions.h>
+#include <wavemap/core/map/hashed_blocks.h>
+#include <wavemap/core/map/map_base.h>
+#include <wavemap/core/utils/query/map_interpolator.h>
+#include <wavemap/core/utils/query/point_sampler.h>
+#include <wavemap/core/utils/sdf/full_euclidean_sdf_generator.h>
+#include <wavemap/io/file_conversions.h>
 #include <wavemap_msgs/Map.h>
 #include <wavemap_ros_conversions/map_msg_conversions.h>
 
@@ -19,7 +19,6 @@
 int main(int argc, char** argv) {
   // Initialize logging
   google::InitGoogleLogging(argv[0]);
-  google::ParseCommandLineFlags(&argc, &argv, false);
   google::InstallFailureSignalHandler();
   FLAGS_alsologtostderr = true;
   FLAGS_colorlogtostderr = true;

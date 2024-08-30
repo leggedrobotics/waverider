@@ -4,17 +4,17 @@
 #include <mutex>
 #include <thread>
 
-#include <tracy/Tracy.hpp>
+#include <wavemap/core/utils/profiler_interface.h>
 
 namespace waverider {
 void ObstacleCells::swap(ObstacleCells& other) {
-  ZoneScoped;
+  ProfilerZoneScoped;
   centers.swap(other.centers);
   cell_widths.swap(other.cell_widths);
 }
 
 const ObstacleCells& WavemapObstacleFilter::getObstacleCells() {
-  ZoneScoped;
+  ProfilerZoneScoped;
 
   // This method is only safe to call from a single thread, warn otherwise
   static auto last_thread_id = std::this_thread::get_id();
@@ -40,7 +40,7 @@ const ObstacleCells& WavemapObstacleFilter::getObstacleCells() {
 
 void WavemapObstacleFilter::update(const wavemap::HashedWaveletOctree& map,
                                    const Point3D& robot_position) {
-  ZoneScoped;
+  ProfilerZoneScoped;
 
   std::scoped_lock lock(new_obstacle_cells_.mutex);
   new_obstacle_cells_.ready = false;

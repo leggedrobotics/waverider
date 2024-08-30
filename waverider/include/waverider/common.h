@@ -1,8 +1,8 @@
 #ifndef WAVERIDER_COMMON_H_
 #define WAVERIDER_COMMON_H_
 
-#include <wavemap/common.h>
-#include <wavemap/indexing/ndtree_index.h>
+#include <wavemap/core/common.h>
+#include <wavemap/core/indexing/ndtree_index.h>
 
 namespace waverider {
 using FloatingPoint = wavemap::FloatingPoint;
