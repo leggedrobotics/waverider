@@ -1,5 +1,5 @@
-#ifndef WAVERIDER_ROS_WAVERIDER_SERVER_H_
-#define WAVERIDER_ROS_WAVERIDER_SERVER_H_
+#ifndef WAVERIDER_ROS_ROS_SERVER_H_
+#define WAVERIDER_ROS_ROS_SERVER_H_
 
 #include <string>
 #include <thread>
@@ -8,16 +8,24 @@
 #include <std_srvs/Empty.h>
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
 #include <wavemap/core/config/config_base.h>
+#include <wavemap/core/config/value_with_unit.h>
 #include <wavemap/core/map/map_base.h>
 #include <wavemap_ros/utils/tf_transformer.h>
 #include <waverider/waverider_policy.h>
 
 namespace waverider {
-struct WaveriderServerConfig : wavemap::ConfigBase<WaveriderServerConfig, 3> {
+using wavemap::FloatingPoint;
+using wavemap::SiUnit;
+using wavemap::ValueWithUnit;
+
+struct WaveriderServerConfig : wavemap::ConfigBase<WaveriderServerConfig, 5> {
   std::string world_frame = "odom";
 
   int publish_debug_visuals_every_n_iterations = 20;
-  std::string get_state_from_tf_frame;  // Leave blank to disable
+
+  std::string robot_state_topic;
+  std::string goal_tf_frame;
+  ValueWithUnit<SiUnit::kSeconds, FloatingPoint> goal_tf_delay = 0.05f;
 
   static MemberMap memberMap;
 
@@ -37,27 +45,21 @@ class WaveriderServer {
     continue_async_planning_.store(false, std::memory_order_relaxed);
   }
 
-  // ROS interfaces
-  void currentReferenceCallback(
-      const trajectory_msgs::MultiDOFJointTrajectory& trajectory_msg);
-  void estimateStateFromTf();
-
-  bool toggleServiceCallback(std_srvs::Empty::Request& req,
-                             std_srvs::Empty::Response& re);
+  void robotStateCallback();
 
  private:
   const WaveriderServerConfig config_;
 
-  // Wavemap-based obstacle avoidance policy
-  // TODO(victorr): After submission, rewrite using atomics.
-  //                Not yet done as this requires some changes in rmpcpp.
   struct {
+    // TODO(victorr): Switch to SE2 state
     std::optional<rmpcpp::SE3State> data;
     std::mutex mutex;
-  } world_state_;
+  } robot_state_;
+
+  // Wavemap-based obstacle avoidance policy
   WaveriderPolicy waverider_policy_;
 
-  // Asynchronous plan policy publishing logic
+  // Asynchronous policy publishing logic
   std::atomic<bool> continue_async_planning_{false};
   std::thread async_planning_thread_;
   void asyncPlanningLoop();
@@ -65,18 +67,15 @@ class WaveriderServer {
 
   // ROS interfaces
   void subscribeToTopics(ros::NodeHandle& nh);
-  ros::Subscriber current_reference_sub_;
+  ros::Subscriber robot_state_sub_;
   wavemap::TfTransformer transformer_;
-
-  void subscribeToTimers(const ros::NodeHandle& nh);
-  ros::Timer state_from_tf_timer_;
 
   void advertiseTopics(ros::NodeHandle& nh_private);
   ros::Publisher policy_pub_;
   ros::Publisher debug_pub_;
 
-  ros::ServiceServer srv_level_toggle_;
+  std::optional<Point3D> getGoalFromTf();
 };
 }  // namespace waverider
 
-#endif  // WAVERIDER_ROS_WAVERIDER_SERVER_H_
+#endif  // WAVERIDER_ROS_ROS_SERVER_H_

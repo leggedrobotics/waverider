@@ -1,7 +1,7 @@
+#include "waverider_ros/ros_server.h"
+
 #include <gflags/gflags.h>
 #include <wavemap_ros/ros_server.h>
-
-#include "waverider_ros/waverider_server.h"
 
 class MapChangedCallbackOperation : public wavemap::MapOperationBase {
  public:
@@ -28,7 +28,6 @@ int main(int argc, char** argv) {
   // Setup GLOG and register a failure signal handler that prints the callstack
   // if the program is killed (e.g. SIGSEGV)
   google::InitGoogleLogging(argv[0]);
-  google::ParseCommandLineFlags(&argc, &argv, false);
   google::InstallFailureSignalHandler();
   FLAGS_alsologtostderr = true;
   FLAGS_colorlogtostderr = true;
@@ -65,11 +64,7 @@ int main(int argc, char** argv) {
         std::make_unique<MapChangedCallbackOperation>(
             wavemap_server->getMap(),
             [&waverider_server](const wavemap::MapBase& map) {
-              std::cout << "EVAL\t" << ros::Time::now()
-                        << "\tSTARTED obstacle cells update" << std::endl;
               waverider_server->updateMap(map);
-              std::cout << "EVAL\t" << ros::Time::now()
-                        << "\tFINISHED obstacle cells update" << std::endl;
             });
     wavemap_server->getPipeline().addOperation(
         std::move(map_changed_callback_op));
