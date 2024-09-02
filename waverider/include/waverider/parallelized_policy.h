@@ -28,21 +28,21 @@ class ParallelizedPolicy {
 
   // Softmax helper function
   inline float h(float z) const {
-    return (z + tuning_.c * std::log(1 + std::exp(-2.f * tuning_.c * z)));
+    return (z + tuning_.c * std::log(1.f + std::exp(-2.f * tuning_.c * z)));
   }
   inline static float wr(float s, float r) {
     if (s > r) {
       return 0;
     }
-    const float c2 = 1 / (r * r);
-    const float c1 = -2 / r;
+    const float c2 = 1.f / (r * r);
+    const float c1 = -2.f / r;
     return (static_cast<float>(c2) * s * s) + (c1 * s) + 1.f;
   }
 
   void setR(float r) {
     tuning_.r = r;
-    tuning_.nu_rep = 0.5 * r;
-    tuning_.nu_damp = 0.3 * r;
+    tuning_.nu_rep = 0.5f * r;
+    tuning_.nu_damp = 0.3f * r;
   }
 
  private:

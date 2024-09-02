@@ -47,8 +47,6 @@ void ParallelizedPolicy::init(const std::vector<Eigen::Vector3f>& x_obs,
     const Eigen::Vector3f v = s(f_temp);
     Eigen::Matrix3f A_temp =
         wr(static_cast<float>(d_x), r) * (v * v.transpose());
-    Eigen::Map<Eigen::Matrix<float, 9, 1>> A_temp_v(A_temp.data(),
-                                                    A_temp.size());
 
     // set A
     A_sum += A_temp;
