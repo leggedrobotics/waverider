@@ -1,0 +1,8 @@
+world_frame: "map"
+robot_state_topic: "/state_estimator/alma_state"
+goal_tf_frame: "waverider_goal"
+ground_plane_tf_frame: "footprint"
+tf_lookup_delay: { "seconds": 0.05 }
+occupancy_threshold: 0.1
+control_period: { "seconds": 0.02 }
+publish_debug_visuals_every_n_iterations: 20

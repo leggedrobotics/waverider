@@ -5,6 +5,7 @@
 #include <thread>
 
 #include <alma_msgs/AlmaState.h>
+#include <rmpcpp/policies/simple_target_policy.h>
 #include <ros/ros.h>
 #include <std_srvs/Empty.h>
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
@@ -19,14 +20,20 @@ using wavemap::FloatingPoint;
 using wavemap::SiUnit;
 using wavemap::ValueWithUnit;
 
-struct WaveriderServerConfig : wavemap::ConfigBase<WaveriderServerConfig, 5> {
+struct WaveriderServerConfig : wavemap::ConfigBase<WaveriderServerConfig, 8> {
   std::string world_frame = "odom";
 
-  int publish_debug_visuals_every_n_iterations = 20;
-
   std::string robot_state_topic;
+
   std::string goal_tf_frame;
-  ValueWithUnit<SiUnit::kSeconds, FloatingPoint> goal_tf_delay = 0.05f;
+  std::string ground_plane_tf_frame;
+  ValueWithUnit<SiUnit::kSeconds, FloatingPoint> tf_lookup_delay = 0.05f;
+
+  FloatingPoint occupancy_threshold = 0.1f;
+
+  ValueWithUnit<SiUnit::kSeconds, FloatingPoint> control_period = 0.02f;
+
+  int publish_debug_visuals_every_n_iterations = 20;
 
   static MemberMap memberMap;
 
@@ -52,13 +59,13 @@ class WaveriderServer {
   const WaveriderServerConfig config_;
 
   struct {
-    // TODO(victorr): Switch to SE2 state
     std::optional<rmpcpp::SE3State> data;
     std::mutex mutex;
   } robot_state_;
 
   // Wavemap-based obstacle avoidance policy
   WaveriderPolicy waverider_policy_;
+  rmpcpp::SimpleTargetPolicy<rmpcpp::Space<3>> goal_attractor_policy_;
 
   // Asynchronous policy publishing logic
   std::atomic<bool> continue_async_planning_{false};
@@ -70,15 +77,16 @@ class WaveriderServer {
   void subscribeToTopics(ros::NodeHandle& nh);
   ros::Subscriber robot_state_sub_;
   wavemap::TfTransformer transformer_;
-  uint64_t prev_time;
-  Eigen::Vector3d prev_v;
-  Eigen::Vector3d prev_w;
+  uint64_t prev_time_ = 0u;
+  Eigen::Vector3d prev_v_ = Eigen::Vector3d::Zero();
+  Eigen::Vector3d prev_w_ = Eigen::Vector3d::Zero();
 
   void advertiseTopics(ros::NodeHandle& nh_private);
   ros::Publisher policy_pub_;
   ros::Publisher debug_pub_;
 
   std::optional<Point3D> getGoalFromTf();
+  std::optional<Plane3D> getGroundPlaneFromTf();
 };
 }  // namespace waverider
 

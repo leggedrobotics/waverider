@@ -27,7 +27,7 @@ class WavemapObstacleFilter {
   }
 
   void update(const wavemap::HashedWaveletOctree& map,
-              const Point3D& robot_position);
+              const Point3D& robot_position, const Plane3D& ground_plane);
 
   bool isReady() const {
     return !obstacle_cells_.centers.empty() ||
@@ -71,10 +71,12 @@ class WavemapObstacleFilter {
   }
 
   void leafObstacleFilter(
+      const Point3D& robot_position, const Plane3D& ground_plane,
       const HashedWaveletOctreeBlock::BlockIndex& block_index,
-      const HashedWaveletOctreeBlock& block, Point3D robot_pos);
+      const HashedWaveletOctreeBlock& block);
 
   void adaptiveObstacleFilter(const Point3D& robot_position,
+                              const Plane3D& ground_plane,
                               const OctreeIndex& node_index,
                               const HashedWaveletOctreeBlock::NodeType& node,
                               FloatingPoint node_occupancy);

@@ -30,7 +30,7 @@ Panels:
   - Class: rviz/Time
     Name: Time
     SyncMode: 0
-    SyncSource: LIO
+    SyncSource: ""
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -189,25 +189,34 @@ Visualization Manager:
           Value: true
       Enabled: true
       Name: Input
-    - Class: wavemap_rviz_plugin/WavemapOctree
-      Enabled: false
+    - Class: wavemap_rviz_plugin/WavemapMap
+      Enabled: true
       Name: Map
       Queue Size: 10
-      Request whole map: true
-      Show grid:
+      Render slice:
         Alpha: 1
-        Max log odds: 1e+06
-        Min log odds: 0.0010000000474974513
-        Show: true
-      Show slice:
-        Alpha: 0.5
+        Color mode: Probability
+        Enable: false
         Max log odds: 1e+06
         Min log odds: -1e+06
-        Show: false
-        Slice height: -1
+        Slice height: 0
+      Render voxels:
+        Alpha: 1
+        Cell selector: Surface
+        Color mode: Height
+        Enable: true
+        Flat color: 0; 0; 255
+        Frame rate:
+          Max update time: 20
+        Log odds threshold: 0.0010000000474974513
+        Max log odds: 1e+06
+        Min log odds: 0.0010000000474974513
+        Termination height: 0
+        Unknown log odds: 9.999999747378752e-05
+      Source: Topic
       Topic: /waverider_server/mapper/map
       Unreliable: false
-      Value: false
+      Value: true
     - Class: rviz/MarkerArray
       Enabled: true
       Marker Topic: /waverider_server/planner/filtered_obstacles
@@ -219,14 +228,15 @@ Visualization Manager:
         level_3: true
         level_4: true
         level_5: true
-        robot: true
+        robot: false
+        velocity_command: true
       Queue Size: 100
       Value: true
   Enabled: true
   Global Options:
     Background Color: 243; 243; 243
     Default Light: true
-    Fixed Frame: odom
+    Fixed Frame: map
     Frame Rate: 30
   Name: root
   Tools:
@@ -250,7 +260,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/XYOrbit
-      Distance: 7.8277130126953125
+      Distance: 9.651510238647461
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -258,17 +268,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: -0.42383313179016113
-        Y: 14.65207576751709
-        Z: -4.0531158447265625e-06
+        X: 5.590049743652344
+        Y: 2.0047922134399414
+        Z: -9.775161743164062e-06
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.40979886054992676
+      Pitch: 0.6997988224029541
       Target Frame: <Fixed Frame>
-      Yaw: 4.311460494995117
+      Yaw: 4.206457138061523
     Saved: ~
 Window Geometry:
   Displays:

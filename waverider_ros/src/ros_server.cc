@@ -1,6 +1,7 @@
 #include "waverider_ros/ros_server.h"
 
 #include <geometry_msgs/TwistStamped.h>
+#include <rmpcpp/eval/integrator.h>
 #include <rmpcpp/geometry/partial_geometry.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <wavemap/core/utils/profiler_interface.h>
@@ -11,10 +12,14 @@
 namespace waverider {
 DECLARE_CONFIG_MEMBERS(WaveriderServerConfig,
                       (world_frame)
-                      (publish_debug_visuals_every_n_iterations)
                       (robot_state_topic)
                       (goal_tf_frame)
-                      (goal_tf_delay));
+                      (ground_plane_tf_frame)
+                      (tf_lookup_delay)
+                      (occupancy_threshold)
+                      (control_period)
+                      (publish_debug_visuals_every_n_iterations)
+);
 
 bool WaveriderServerConfig::isValid(bool verbose) const {
   bool all_valid = true;
@@ -22,7 +27,9 @@ bool WaveriderServerConfig::isValid(bool verbose) const {
   all_valid &= IS_PARAM_NE(world_frame, "", verbose);
   all_valid &= IS_PARAM_NE(robot_state_topic, "", verbose);
   all_valid &= IS_PARAM_NE(goal_tf_frame, "", verbose);
-  all_valid &= IS_PARAM_GE(goal_tf_delay, 0.f, verbose);
+  all_valid &= IS_PARAM_NE(ground_plane_tf_frame, "", verbose);
+  all_valid &= IS_PARAM_GE(tf_lookup_delay, 0.f, verbose);
+  all_valid &= IS_PARAM_GT(control_period, 0.f, verbose);
 
   return all_valid;
 }
@@ -35,9 +42,13 @@ WaveriderServer::WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private)
 
 WaveriderServer::WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private,
                                  const WaveriderServerConfig& config)
-    : config_(config.checkValid()), prev_time(0u) {
-  prev_v.setZero();
-  prev_w.setZero();
+    : config_(config.checkValid()) {
+  // Configure the policies
+  waverider_policy_.setOccupancyThreshold(config_.occupancy_threshold);
+  goal_attractor_policy_.setTuning(10.0, 15.0, 0.01);
+  goal_attractor_policy_.setA(10.0 * Eigen::Matrix3d::Identity());
+
+  // Interface with ROS
   subscribeToTopics(nh);
   advertiseTopics(nh_private);
 }
@@ -57,10 +68,18 @@ void WaveriderServer::updateMap(const wavemap::MapBase& map) {
     robot_position = robot_state_.data.value().p().cast<FloatingPoint>();
   }
 
+  // Get the ground plane
+  const auto ground_plane = getGroundPlaneFromTf();
+  if (!ground_plane.has_value()) {
+    ROS_WARN("Ground plane TF lookup failed. Could not extract obstacles.");
+    return;
+  }
+
   // Extract the obstacles
   if (auto hashed_map = dynamic_cast<const wavemap::HashedWaveletOctree*>(&map);
       hashed_map) {
-    waverider_policy_.updateObstacles(*hashed_map, robot_position);
+    waverider_policy_.updateObstacles(*hashed_map, robot_position,
+                                      *ground_plane);
   } else {
     ROS_WARN(
         "Waverider policies can currently only be extracted from maps of "
@@ -105,10 +124,10 @@ void WaveriderServer::robotStateCallback(alma_msgs::AlmaState robot_state_msg) {
   Eigen::Vector3d vdot;
   Eigen::Vector3d wdot;
 
-  if (prev_time != 0u) {
-    double dt = (curr_time - prev_time) / 1e9;
-    vdot = (v - prev_v) / dt;
-    wdot = (w - prev_w) / dt;
+  if (prev_time_ != 0u) {
+    double dt = static_cast<double>(curr_time - prev_time_) / 1e9;
+    vdot = (v - prev_v_) / dt;
+    wdot = (w - prev_w_) / dt;
   } else {
     vdot.setZero();
     wdot.setZero();
@@ -126,14 +145,14 @@ void WaveriderServer::robotStateCallback(alma_msgs::AlmaState robot_state_msg) {
     robot_state_.data->dw() = R_odom_body_ref * wdot;
   }
 
-  prev_time = curr_time;
-  prev_v = v;
-  prev_w = w;
+  prev_time_ = curr_time;
+  prev_v_ = v;
+  prev_w_ = w;
 }
 
 void WaveriderServer::asyncPlanningLoop() {
   ProfilerZoneScoped;
-  ros::WallRate rate(200.0);
+  ros::WallRate rate(ros::Duration(config_.control_period));
   while (ros::ok() &&
          continue_async_planning_.load(std::memory_order_relaxed)) {
     evaluateAndPublishPolicy();
@@ -161,31 +180,46 @@ void WaveriderServer::evaluateAndPublishPolicy() {
   }
 
   // Get the goal position
-  const auto goal = getGoalFromTf();
-  if (!goal.has_value()) {
-    ROS_INFO("Goal position not set. Will do nothing.");
-    return;
+  {
+    const auto goal = getGoalFromTf();
+    if (!goal.has_value()) {
+      ROS_INFO("Goal position not set. Will do nothing.");
+      return;
+    }
+    goal_attractor_policy_.setTarget(goal->cast<double>());
   }
 
-  // Evaluate the goal attraction policy
   // TODO(victorr): Make sure frames are consistent between state, goal and obs.
-  // TODO(victorr): Update the goal attractor to also induce robot rotations
+
+  // Evaluate the goal attraction policy
+  auto attractor_r3_value =
+      goal_attractor_policy_.evaluateAt(current_state.r3());
+  // TODO(victorr): Place the goal attractor frame slightly in front of body,
+  //                to also induce robot rotations
+  auto attractor_se3_value =
+      rmpcpp::R3toSE3{}.at(robot_state_.data->r3()).pull(attractor_r3_value);
 
   // Evaluate the static obstacle avoidance policy
-  // TODO(victorr): Update this to work in 2D and induce robot rotations
-  const auto val_wavemap_r3_W =
-      waverider_policy_.evaluateAt(current_state.r3());
+  auto waverider_r3_value = waverider_policy_.evaluateAt(current_state.r3());
+  auto waverider_se3_value =
+      rmpcpp::R3toSE3{}.at(robot_state_.data->r3()).pull(waverider_r3_value);
 
   // Evaluate the dynamic obstacle avoidance policy
   // TODO(victorr): Add a policy that avoids all dynamic obstacle bounding boxes
 
   // Forward integrate the state and policy to obtain velocity reference
-  // TODO(victorr): Forward integrate state and policy by 1.f/(locomotion rate)
+  auto propagated_state = current_state;
+  propagated_state.v().setZero();  // TODO(victorr): Only for debugging, remove
+  rmpcpp::TrapezoidalIntegrator integrator{propagated_state,
+                                           config_.control_period};
+  auto f_total = (attractor_se3_value + waverider_se3_value).f_;
+  integrator.step(f_total);
 
   // Send velocity reference to the locomotion controller
   geometry_msgs::TwistStamped twist_msg;
-  twist_msg.header.stamp = ros::Time().fromNSec(prev_time);
+  twist_msg.header.stamp = ros::Time().fromNSec(prev_time_);
   twist_msg.header.frame_id = "base";
+  LOG(INFO) << "Velocity reference: " << propagated_state.v().transpose();
   // TODO(smauq): take the policy output and convert it to base frame
   policy_pub_.publish(twist_msg);
 
@@ -197,15 +231,21 @@ void WaveriderServer::evaluateAndPublishPolicy() {
       // marker_array.markers.emplace_back(generateClearingMarker());
       addFilteredObstaclesToMarkerArray(waverider_policy_.getObstacleCells(),
                                         config_.world_frame, marker_array);
+      marker_array.markers.emplace_back(goalPositionToMarker(
+          goal_attractor_policy_.target().cast<FloatingPoint>(),
+          config_.world_frame));
       marker_array.markers.emplace_back(robotPositionToMarker(
           current_state.p().cast<float>(), config_.world_frame));
+      marker_array.markers.emplace_back(velocityCommandToMarker(
+          current_state.p().cast<float>(), propagated_state.v().cast<float>(),
+          config_.world_frame));
       debug_pub_.publish(marker_array);
     }
   }
 }
 
 void WaveriderServer::subscribeToTopics(ros::NodeHandle& nh) {
-  robot_state_sub_ = nh.subscribe("/state_estimator/alma_state", 1,
+  robot_state_sub_ = nh.subscribe(config_.robot_state_topic, 1,
                                   &WaveriderServer::robotStateCallback, this);
 }
 
@@ -219,11 +259,26 @@ void WaveriderServer::advertiseTopics(ros::NodeHandle& nh_private) {
 
 std::optional<Point3D> WaveriderServer::getGoalFromTf() {
   ros::Time lookup_time =
-      ros::Time::now() - ros::Duration(config_.goal_tf_delay);
+      ros::Time::now() - ros::Duration(config_.tf_lookup_delay);
   wavemap::Transformation3D T_W_G;
   if (transformer_.lookupTransform(config_.world_frame, config_.goal_tf_frame,
                                    lookup_time, T_W_G)) {
     return T_W_G.getPosition();
+  }
+  return std::nullopt;
+}
+
+std::optional<Plane3D> WaveriderServer::getGroundPlaneFromTf() {
+  ros::Time lookup_time =
+      ros::Time::now() - ros::Duration(config_.tf_lookup_delay);
+  wavemap::Transformation3D T_W_G;
+  if (transformer_.lookupTransform(config_.world_frame,
+                                   config_.ground_plane_tf_frame, lookup_time,
+                                   T_W_G)) {
+    Plane3D ground_plane;
+    ground_plane.normal = T_W_G.getRotation().rotate(Vector3D::UnitZ());
+    ground_plane.offset = ground_plane.normal.dot(T_W_G.getPosition());
+    return ground_plane;
   }
   return std::nullopt;
 }

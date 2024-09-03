@@ -39,7 +39,8 @@ const ObstacleCells& WavemapObstacleFilter::getObstacleCells() {
 }
 
 void WavemapObstacleFilter::update(const wavemap::HashedWaveletOctree& map,
-                                   const Point3D& robot_position) {
+                                   const Point3D& robot_position,
+                                   const Plane3D& ground_plane) {
   ProfilerZoneScoped;
 
   std::scoped_lock lock(new_obstacle_cells_.mutex);
@@ -84,45 +85,36 @@ void WavemapObstacleFilter::update(const wavemap::HashedWaveletOctree& map,
       continue;
     }
 
+    // TODO(victorr): Also skip if fully below ground plane
+
     // Extract obstacles at the appropriate resolution
     if (use_only_lowest_level_) {
       // All at highest available (leaf) resolution
-      leafObstacleFilter(block_idx, block, robot_position);
+      leafObstacleFilter(robot_position, ground_plane, block_idx, block);
     } else {
       // Adaptive resolution
-      adaptiveObstacleFilter(robot_position, block_node_index,
+      adaptiveObstacleFilter(robot_position, ground_plane, block_node_index,
                              block.getRootNode(), block.getRootScale());
     }
   }
 
-  // Print debug info
-  /* size_t num_policies = 0;
-   for (int i = 0; i <= tree_height_; ++i) {
-     std::cout << "EVAL\t"
-               << "LEVEL" << i << "\t"
-               << new_obstacle_cells_.data.centers[i].size() << std::endl;
-     num_policies += new_obstacle_cells_.data.centers[i].size();
-   }
-   std::cout << "EVAL\t"
-             << "TOTAL\t" << num_policies << std::endl;
-   std::cout << "EVAL\t"
-             << "FUNC\t" << function_evals_ << std::endl;
- */
   // Indicate that the new obstacle array is ready
   new_obstacle_cells_.ready = true;
 }
 
 void WavemapObstacleFilter::leafObstacleFilter(
+    const Point3D& robot_position, const Plane3D& ground_plane,
     const HashedWaveletOctreeBlock::BlockIndex& block_index,
-    const HashedWaveletOctreeBlock& block, Point3D robot_pos) {
+    const HashedWaveletOctreeBlock& block) {
   block.forEachLeaf(
       block_index,
-      [robot_pos_l = robot_pos, occupancy_threshold = occupancy_threshold_,
+      [robot_pos_l = robot_position, occupancy_threshold = occupancy_threshold_,
        min_cell_width = min_cell_width_,
        &new_obstacle_cells = new_obstacle_cells_.data,
        lowest_level_radius = lowest_level_radius_](
           const OctreeIndex& node_index, FloatingPoint node_occupancy) {
         if (occupancy_threshold < node_occupancy) {
+          // TODO(victorr): Only keep if fully above ground plane
           const Point3D node_center = wavemap::convert::nodeIndexToCenterPoint(
               node_index, min_cell_width);
           if ((node_center - robot_pos_l).norm() < lowest_level_radius) {
@@ -134,10 +126,13 @@ void WavemapObstacleFilter::leafObstacleFilter(
 }
 
 void WavemapObstacleFilter::adaptiveObstacleFilter(  // NOLINT
-    const Point3D& robot_position, const OctreeIndex& node_index,
+    const Point3D& robot_position, const Plane3D& ground_plane,
+    const OctreeIndex& node_index,
     const HashedWaveletOctreeBlock::NodeType& node,
     FloatingPoint node_occupancy) {
   ++function_evals_;
+
+  // TODO(victorr): Finish adding and checking ground removal logic
 
   // Skip nodes that are saturated free
   // NOTE: Such nodes are guaranteed to have no occupied children.
@@ -161,8 +156,10 @@ void WavemapObstacleFilter::adaptiveObstacleFilter(  // NOLINT
     // any of its children is occupied
     if (occupancy_threshold_ < node_occupancy ||
         nodeHasOccupiedChild(node, node_occupancy)) {
-      new_obstacle_cells_.data.centers[node_index.height].emplace_back(
-          node_center);
+      if (ground_plane.isBelow(node_center)) {
+        new_obstacle_cells_.data.centers[node_index.height].emplace_back(
+            node_center);
+      }
     }
   } else {
     // Otherwise, keep descending the tree
@@ -181,16 +178,18 @@ void WavemapObstacleFilter::adaptiveObstacleFilter(  // NOLINT
       // If the child node has children, recurse
       if (node.hasChild(child_idx)) {
         const auto& child_node = *node.getChild(child_idx);
-        adaptiveObstacleFilter(robot_position, child_node_index, child_node,
-                               child_occupancy);
+        adaptiveObstacleFilter(robot_position, ground_plane, child_node_index,
+                               child_node, child_occupancy);
       } else {
         // Otherwise, the node must be a leaf
         // Add it as an obstacle if it's occupied
         if (occupancy_threshold_ < child_occupancy) {
           const Point3D child_center = wavemap::convert::nodeIndexToCenterPoint(
               child_node_index, min_cell_width_);
-          new_obstacle_cells_.data.centers[child_node_index.height]
-              .emplace_back(child_center);
+          if (ground_plane.isBelow(child_center)) {
+            new_obstacle_cells_.data.centers[child_node_index.height]
+                .emplace_back(child_center);
+          }
         }
       }
     }

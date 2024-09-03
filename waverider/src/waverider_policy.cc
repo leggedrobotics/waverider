@@ -6,9 +6,10 @@
 
 namespace waverider {
 void WaveriderPolicy::updateObstacles(const wavemap::HashedWaveletOctree& map,
-                                      const Point3D& robot_position) {
+                                      const Point3D& robot_position,
+                                      const Plane3D& ground_plane) {
   ProfilerZoneScoped;
-  obstacle_filter_.update(map, robot_position);
+  obstacle_filter_.update(map, robot_position, ground_plane);
 }
 
 rmpcpp::PolicyValue<3> WaveriderPolicy::evaluateAt(const rmpcpp::State<3>& x) {
@@ -26,7 +27,6 @@ rmpcpp::PolicyValue<3> WaveriderPolicy::evaluateAt(const rmpcpp::State<3>& x) {
   std::vector<rmpcpp::PolicyValue<3>> all_policies;
   for (size_t i = 0; i < policy_cells.cell_widths.size(); i++) {
     if (i == 0 || run_all_levels_) {
-      // std::cout << "N"<< i << policy_cells.centers[i].size() << std::endl;
       ParallelizedPolicy pol_generator(policy_cells.centers[i].size(),
                                        policy_tuning_);
       pol_generator.setR(WavemapObstacleFilter::maxRangeForHeight(i) * 1.5);
@@ -40,8 +40,6 @@ rmpcpp::PolicyValue<3> WaveriderPolicy::evaluateAt(const rmpcpp::State<3>& x) {
 
   rmpcpp::PolicyValue<3> scaled_avoidance = {avoidance_policy.f_,
                                              avoidance_policy.A_};
-  //  std::cout << scaled_avoidance.f_.transpose() << std::endl;
-  //  std::cout << scaled_avoidance.A_ << std::endl;
   return scaled_avoidance;
 }
 }  // namespace waverider
