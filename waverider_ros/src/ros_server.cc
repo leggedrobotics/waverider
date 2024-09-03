@@ -184,8 +184,8 @@ void WaveriderServer::evaluateAndPublishPolicy() {
 
   // Send velocity reference to the locomotion controller
   geometry_msgs::TwistStamped twist_msg;
-  twist_msg.stamp.header.stamp = ros::Time().fromNSec(prev_time);
-  twist_msg.stamp.header.frame_id = "base";
+  twist_msg.header.stamp = ros::Time().fromNSec(prev_time);
+  twist_msg.header.frame_id = "base";
   // TODO(smauq): take the policy output and convert it to base frame
   policy_pub_.publish(twist_msg);
 
