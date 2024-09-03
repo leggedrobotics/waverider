@@ -14,6 +14,8 @@
   <buildtool_depend>catkin</buildtool_depend>
   <buildtool_depend>catkin_simple</buildtool_depend>
 
+  <depend>alma_msgs</depend>
+  <depend>geometry_msgs</depend>
   <depend>roscpp</depend>
   <depend>std_srvs</depend>
   <depend>wavemap_ros</depend>

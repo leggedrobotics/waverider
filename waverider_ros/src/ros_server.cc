@@ -1,5 +1,6 @@
 #include "waverider_ros/ros_server.h"
 
+#include <geometry_msgs/TwistStamped.h>
 #include <rmpcpp/geometry/partial_geometry.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <wavemap/core/utils/profiler_interface.h>
@@ -34,7 +35,9 @@ WaveriderServer::WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private)
 
 WaveriderServer::WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private,
                                  const WaveriderServerConfig& config)
-    : config_(config.checkValid()) {
+    : config_(config.checkValid()), prev_time(0u) {
+  prev_v.setZero();
+  prev_w.setZero();
   subscribeToTopics(nh);
   advertiseTopics(nh_private);
 }
@@ -78,29 +81,54 @@ void WaveriderServer::startPlanningAsync() {
       std::thread(&WaveriderServer::asyncPlanningLoop, this);
 }
 
-void WaveriderServer::robotStateCallback() {
+void WaveriderServer::robotStateCallback(alma_msgs::AlmaState robot_state_msg) {
   ProfilerZoneScoped;
-  // TODO(smauq): Read current state from msg
-  Eigen::Affine3d T_odom_body_ref = Eigen::Affine3d::Identity();
-  T_odom_body_ref.translation();  // Position
-  T_odom_body_ref.linear();       // Orientation as rotation matrix
-  // TODO(smauq): Check in what frames these should be
-  Eigen::Vector3d v;     // Velocity
-  Eigen::Vector3d vdot;  // Acceleration
-  Eigen::Vector3d w;     // Body angular velocity
-  Eigen::Vector3d wdot;  // Body angular acceleration
+
+  uint64_t curr_time = robot_state_msg.header.stamp.toNSec();
+  Eigen::Matrix3d R_odom_body_ref =
+      Eigen::Quaterniond(robot_state_msg.pose.pose.orientation.w,
+                         robot_state_msg.pose.pose.orientation.x,
+                         robot_state_msg.pose.pose.orientation.y,
+                         robot_state_msg.pose.pose.orientation.z)
+          .toRotationMatrix();
+  Eigen::Vector3d t_odom_body_ref(robot_state_msg.pose.pose.position.x,
+                                  robot_state_msg.pose.pose.position.y,
+                                  robot_state_msg.pose.pose.position.z);
+
+  Eigen::Vector3d v(robot_state_msg.twist.twist.linear.x,
+                    robot_state_msg.twist.twist.linear.y,
+                    robot_state_msg.twist.twist.linear.z);
+  Eigen::Vector3d w(robot_state_msg.twist.twist.angular.x,
+                    robot_state_msg.twist.twist.angular.y,
+                    robot_state_msg.twist.twist.angular.z);
+
+  Eigen::Vector3d vdot;
+  Eigen::Vector3d wdot;
+
+  if (prev_time != 0u) {
+    double dt = (curr_time - prev_time) / 1e9;
+    vdot = (v - prev_v) / dt;
+    wdot = (w - prev_w) / dt;
+  } else {
+    vdot.setZero();
+    wdot.setZero();
+  }
 
   // Convert into world state
   {
     std::scoped_lock lock(robot_state_.mutex);
     robot_state_.data.emplace();
-    robot_state_.data->p() = T_odom_body_ref.translation();
-    robot_state_.data->q() = T_odom_body_ref.rotation();
-    robot_state_.data->v() = T_odom_body_ref.rotation() * v;
-    robot_state_.data->a() = T_odom_body_ref.rotation() * vdot;
-    robot_state_.data->w() = T_odom_body_ref.rotation() * w;
-    robot_state_.data->dw() = T_odom_body_ref.rotation() * wdot;
+    robot_state_.data->p() = t_odom_body_ref;
+    robot_state_.data->q() = R_odom_body_ref;
+    robot_state_.data->v() = R_odom_body_ref * v;
+    robot_state_.data->a() = R_odom_body_ref * vdot;
+    robot_state_.data->w() = R_odom_body_ref * w;
+    robot_state_.data->dw() = R_odom_body_ref * wdot;
   }
+
+  prev_time = curr_time;
+  prev_v = v;
+  prev_w = w;
 }
 
 void WaveriderServer::asyncPlanningLoop() {
@@ -155,8 +183,11 @@ void WaveriderServer::evaluateAndPublishPolicy() {
   // TODO(victorr): Forward integrate state and policy by 1.f/(locomotion rate)
 
   // Send velocity reference to the locomotion controller
-  // TODO(smauq): Populate and publish velocity command msg
-  //  policy_pub_.publish();
+  geometry_msgs::TwistStamped twist_msg;
+  twist_msg.stamp.header.stamp = ros::Time().fromNSec(prev_time);
+  twist_msg.stamp.header.frame_id = "base";
+  // TODO(smauq): take the policy output and convert it to base frame
+  policy_pub_.publish(twist_msg);
 
   // Publish debug visuals
   {
@@ -174,16 +205,13 @@ void WaveriderServer::evaluateAndPublishPolicy() {
 }
 
 void WaveriderServer::subscribeToTopics(ros::NodeHandle& nh) {
-  // TODO(smauq): Subscribe to current state topic
-  //  robot_state_sub_ =
-  //      nh.subscribe(config_.robot_state_topic, 1,
-  //                   &WaveriderServer::currentStateCallback, this);
+  robot_state_sub_ = nh.subscribe("/state_estimator/alma_state", 1,
+                                  &WaveriderServer::robotStateCallback, this);
 }
 
 void WaveriderServer::advertiseTopics(ros::NodeHandle& nh_private) {
-  // TODO(smauq): Advertise velocity reference
-  //  policy_pub_ =
-  //      nh_private.advertise<mav_reactive_planning::PolicyValue>("policy", 1);
+  policy_pub_ = nh_private.advertise<geometry_msgs::TwistStamped>(
+      "/base_tracker/commanded_twist", 1);
   // Advertise debug visuals
   debug_pub_ = nh_private.advertise<visualization_msgs::MarkerArray>(
       "filtered_obstacles", 1);

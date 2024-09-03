@@ -4,6 +4,7 @@
 #include <string>
 #include <thread>
 
+#include <alma_msgs/AlmaState.h>
 #include <ros/ros.h>
 #include <std_srvs/Empty.h>
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
@@ -45,7 +46,7 @@ class WaveriderServer {
     continue_async_planning_.store(false, std::memory_order_relaxed);
   }
 
-  void robotStateCallback();
+  void robotStateCallback(alma_msgs::AlmaState robot_state_msg);
 
  private:
   const WaveriderServerConfig config_;
@@ -69,6 +70,9 @@ class WaveriderServer {
   void subscribeToTopics(ros::NodeHandle& nh);
   ros::Subscriber robot_state_sub_;
   wavemap::TfTransformer transformer_;
+  uint64_t prev_time;
+  Eigen::Vector3d prev_v;
+  Eigen::Vector3d prev_w;
 
   void advertiseTopics(ros::NodeHandle& nh_private);
   ros::Publisher policy_pub_;
