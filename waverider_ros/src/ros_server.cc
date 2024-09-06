@@ -22,6 +22,7 @@ DECLARE_CONFIG_MEMBERS(WaveriderServerConfig,
                       (control_gain)
                       (publish_debug_visuals_every_n_iterations)
                       (attractor_x_offset)
+                      (attractor_yaw_gain)
                       (attractor_tuning)
                       (repulsor_tuning));
 
@@ -200,11 +201,11 @@ void WaveriderServer::evaluateAndPublishPolicy() {
   // Evaluate the goal attraction policy
   auto attractor_r3_value =
       goal_attractor_policy_.evaluateAt(current_state.r3());
-  auto attractor_r2_value =
-      R3toR2{}.at(current_state.r3()).pull(attractor_r3_value);
-  auto attractor_se2_value = R2toSE2Translated{config_.attractor_x_offset}
-                                 .at(R3toR2{}.convertToQ(current_state.r3()))
-                                 .pull(attractor_r2_value);
+  auto attractor_se2_offset_value =
+      R3toSE2{}.at(current_state.r3()).pull(attractor_r3_value);
+  auto attractor_se2_value = SE2toSE2Translated{config_.attractor_x_offset}
+                                 .at(SE3toSE2(current_state))
+                                 .pull(attractor_se2_offset_value);
 
   // Evaluate the static obstacle avoidance policy
   auto waverider_r3_value = waverider_policy_.evaluateAt(current_state.r3());
@@ -222,7 +223,7 @@ void WaveriderServer::evaluateAndPublishPolicy() {
   integrator.step(f_total);
   const Eigen::Vector3d vel_r3{propagated_state.vel_.x(),
                                propagated_state.vel_.y(), 0.0};
-  const double vel_yaw = propagated_state.vel_.z();
+  const double vel_yaw = config_.attractor_yaw_gain * propagated_state.vel_.z();
 
   // Send velocity reference to the locomotion controller
   geometry_msgs::TwistStamped twist_msg;
@@ -232,6 +233,7 @@ void WaveriderServer::evaluateAndPublishPolicy() {
   twist_msg.twist.linear.x = v_body.x();
   twist_msg.twist.linear.y = v_body.y();
   twist_msg.twist.linear.z = v_body.z();
+  twist_msg.twist.angular.z = vel_yaw;
   policy_pub_.publish(twist_msg);
 
   // Publish debug visuals

@@ -30,14 +30,13 @@ class R3toSE2 : public rmpcpp::PartialGeometry<3, 3> {
   }
 };
 
-class R2toSE2Translated : public rmpcpp::GeometryBase<2, 3> {
+class SE2toSE2Translated : public rmpcpp::GeometryBase<3, 3> {
  public:
-  explicit R2toSE2Translated(FloatingPoint x_offset) : x_offset(x_offset) {}
+  explicit SE2toSE2Translated(FloatingPoint x_offset) : x_offset(x_offset) {}
 
   J_phi J(const StateX& state) const override {
-    GeometryBase<2, 3>::J_phi jacobian;
-    jacobian.setZero();
-    jacobian.diagonal().head<2>() = Eigen::Vector2d::Ones();
+    J_phi jacobian;
+    jacobian.setIdentity();
     const auto yaw = state.pos_[2];
     jacobian(0, 2) = x_offset * std::cos(yaw);
     jacobian(1, 2) = -x_offset * std::sin(yaw);

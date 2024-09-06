@@ -22,7 +22,7 @@ using wavemap::SiUnit;
 using wavemap::ValueWithUnit;
 
 struct WaveriderServerConfig
-    : wavemap::ConfigBase<WaveriderServerConfig, 12, AttractorPolicyTuning,
+    : wavemap::ConfigBase<WaveriderServerConfig, 13, AttractorPolicyTuning,
                           RepulsorPolicyTuning> {
   std::string world_frame = "odom";
 
@@ -40,6 +40,7 @@ struct WaveriderServerConfig
   int publish_debug_visuals_every_n_iterations = 20;
 
   ValueWithUnit<SiUnit::kMeters, FloatingPoint> attractor_x_offset = 0.2f;
+  FloatingPoint attractor_yaw_gain = 0.1f;
   AttractorPolicyTuning attractor_tuning;
   RepulsorPolicyTuning repulsor_tuning;
 
