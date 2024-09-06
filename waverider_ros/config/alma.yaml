@@ -7,6 +7,7 @@ occupancy_threshold: 0.1
 control_period: { "seconds": 0.02 }
 control_gain: 2.0
 publish_debug_visuals_every_n_iterations: 20
+attractor_x_offset: { meters: 0.3 }
 attractor_tuning:
   alpha: 15.0
   beta: 20.0

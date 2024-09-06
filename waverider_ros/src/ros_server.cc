@@ -21,6 +21,7 @@ DECLARE_CONFIG_MEMBERS(WaveriderServerConfig,
                       (control_period)
                       (control_gain)
                       (publish_debug_visuals_every_n_iterations)
+                      (attractor_x_offset)
                       (attractor_tuning)
                       (repulsor_tuning));
 
@@ -199,10 +200,11 @@ void WaveriderServer::evaluateAndPublishPolicy() {
   // Evaluate the goal attraction policy
   auto attractor_r3_value =
       goal_attractor_policy_.evaluateAt(current_state.r3());
-  // TODO(victorr): Place the goal attractor frame slightly in front of body,
-  //                to also induce robot rotations
-  auto attractor_se2_value =
-      R3toSE2{}.at(current_state.r3()).pull(attractor_r3_value);
+  auto attractor_r2_value =
+      R3toR2{}.at(current_state.r3()).pull(attractor_r3_value);
+  auto attractor_se2_value = R2toSE2Translated{config_.attractor_x_offset}
+                                 .at(R3toR2{}.convertToQ(current_state.r3()))
+                                 .pull(attractor_r2_value);
 
   // Evaluate the static obstacle avoidance policy
   auto waverider_r3_value = waverider_policy_.evaluateAt(current_state.r3());
