@@ -6,6 +6,7 @@
 #include <visualization_msgs/MarkerArray.h>
 #include <wavemap/core/utils/profiler_interface.h>
 #include <wavemap_ros_conversions/config_conversions.h>
+#include <waverider/geometry.h>
 
 #include "waverider_ros/policy_visuals.h"
 
@@ -195,36 +196,36 @@ void WaveriderServer::evaluateAndPublishPolicy() {
     goal_attractor_policy_.setTarget(goal->cast<double>());
   }
 
-  // TODO(victorr): Make sure frames are consistent between state, goal and obs.
-
   // Evaluate the goal attraction policy
   auto attractor_r3_value =
       goal_attractor_policy_.evaluateAt(current_state.r3());
   // TODO(victorr): Place the goal attractor frame slightly in front of body,
   //                to also induce robot rotations
-  auto attractor_se3_value =
-      rmpcpp::R3toSE3{}.at(current_state.r3()).pull(attractor_r3_value);
+  auto attractor_r2_value =
+      R3toR2{}.at(current_state.r3()).pull(attractor_r3_value);
 
   // Evaluate the static obstacle avoidance policy
   auto waverider_r3_value = waverider_policy_.evaluateAt(current_state.r3());
-  auto waverider_se3_value =
-      rmpcpp::R3toSE3{}.at(current_state.r3()).pull(waverider_r3_value);
+  auto waverider_r2_value =
+      R3toR2{}.at(current_state.r3()).pull(waverider_r3_value);
 
   // Evaluate the dynamic obstacle avoidance policy
   // TODO(victorr): Add a policy that avoids all dynamic obstacle bounding boxes
 
   // Forward integrate the state and policy to obtain velocity reference
-  auto propagated_state = current_state.r3();
+  auto propagated_state = R3toR2{}.convertToQ(current_state.r3());
   rmpcpp::TrapezoidalIntegrator integrator{
       propagated_state, config_.control_gain * config_.control_period};
-  auto f_total = (attractor_r3_value + waverider_r3_value).f_;
+  auto f_total = (attractor_r2_value + waverider_r2_value).f_;
   integrator.step(f_total);
+  const Eigen::Vector3d vel_r3{propagated_state.vel_.x(),
+                               propagated_state.vel_.y(), 0.0};
 
   // Send velocity reference to the locomotion controller
   geometry_msgs::TwistStamped twist_msg;
   twist_msg.header.stamp = ros::Time().fromNSec(prev_time_);
   twist_msg.header.frame_id = "base";
-  Eigen::Vector3d v_body = current_state.q().inverse() * propagated_state.vel_;
+  Eigen::Vector3d v_body = current_state.q().inverse() * vel_r3;
   twist_msg.twist.linear.x = v_body.x();
   twist_msg.twist.linear.y = v_body.y();
   twist_msg.twist.linear.z = v_body.z();
@@ -243,9 +244,9 @@ void WaveriderServer::evaluateAndPublishPolicy() {
           config_.world_frame));
       marker_array.markers.emplace_back(robotPositionToMarker(
           current_state.p().cast<float>(), config_.world_frame));
-      marker_array.markers.emplace_back(velocityCommandToMarker(
-          current_state.p().cast<float>(), propagated_state.vel_.cast<float>(),
-          config_.world_frame));
+      marker_array.markers.emplace_back(
+          velocityCommandToMarker(current_state.p().cast<float>(),
+                                  vel_r3.cast<float>(), config_.world_frame));
       debug_pub_.publish(marker_array);
     }
   }
