@@ -21,9 +21,11 @@ visualization_msgs::Marker robotPositionToMarker(
 visualization_msgs::Marker goalPositionToMarker(const Vector3D& robot_position,
                                                 const std::string& world_frame);
 
-visualization_msgs::Marker velocityCommandToMarker(
-    const Vector3D& robot_position, const Vector3D& velocity_command,
-    const std::string& world_frame);
+visualization_msgs::Marker commandToMarker(const Vector3D& robot_position,
+                                           const Vector3D& command,
+                                           const std::string& world_frame,
+                                           const std::string& ns, float r,
+                                           float g, float b);
 
 visualization_msgs::Marker filteredObstacleLevelToMarker(
     int lvl, double size, const std::vector<Vector3D>& obstacle_centers,

@@ -61,13 +61,15 @@ visualization_msgs::Marker goalPositionToMarker(
   return marker;
 }
 
-visualization_msgs::Marker velocityCommandToMarker(
-    const Vector3D& robot_position, const Vector3D& velocity_command,
-    const std::string& world_frame) {
+visualization_msgs::Marker commandToMarker(const Vector3D& robot_position,
+                                           const Vector3D& command,
+                                           const std::string& world_frame,
+                                           const std::string& ns, float r,
+                                           float g, float b) {
   visualization_msgs::Marker marker;
 
   const auto q = Eigen::Quaternion<FloatingPoint>::FromTwoVectors(
-                     Vector3D::UnitX(), velocity_command)
+                     Vector3D::UnitX(), command)
                      .normalized();
   marker.pose.orientation.x = q.x();
   marker.pose.orientation.y = q.y();
@@ -77,14 +79,16 @@ visualization_msgs::Marker velocityCommandToMarker(
   marker.pose.position.y = robot_position.y();
   marker.pose.position.z = robot_position.z();
   marker.id = 100;
-  marker.ns = "velocity_command";
+  marker.ns = ns;
   marker.header.frame_id = world_frame;
   marker.type = visualization_msgs::Marker::ARROW;
   marker.action = visualization_msgs::Marker::ADD;
-  marker.scale.x = velocity_command.norm();
+  marker.scale.x = command.norm();
   marker.scale.y = 0.2;
   marker.scale.z = 0.2;
-  marker.color.b = 1.0;
+  marker.color.r = r;
+  marker.color.g = g;
+  marker.color.b = b;
   marker.color.a = 1.0;
 
   return marker;

@@ -201,25 +201,26 @@ void WaveriderServer::evaluateAndPublishPolicy() {
       goal_attractor_policy_.evaluateAt(current_state.r3());
   // TODO(victorr): Place the goal attractor frame slightly in front of body,
   //                to also induce robot rotations
-  auto attractor_r2_value =
-      R3toR2{}.at(current_state.r3()).pull(attractor_r3_value);
+  auto attractor_se2_value =
+      R3toSE2{}.at(current_state.r3()).pull(attractor_r3_value);
 
   // Evaluate the static obstacle avoidance policy
   auto waverider_r3_value = waverider_policy_.evaluateAt(current_state.r3());
-  auto waverider_r2_value =
-      R3toR2{}.at(current_state.r3()).pull(waverider_r3_value);
+  auto waverider_se2_value =
+      R3toSE2{}.at(current_state.r3()).pull(waverider_r3_value);
 
   // Evaluate the dynamic obstacle avoidance policy
   // TODO(victorr): Add a policy that avoids all dynamic obstacle bounding boxes
 
   // Forward integrate the state and policy to obtain velocity reference
-  auto propagated_state = R3toR2{}.convertToQ(current_state.r3());
+  auto propagated_state = SE3toSE2(current_state);
   rmpcpp::TrapezoidalIntegrator integrator{
       propagated_state, config_.control_gain * config_.control_period};
-  auto f_total = (attractor_r2_value + waverider_r2_value).f_;
+  auto f_total = (attractor_se2_value + waverider_se2_value).f_;
   integrator.step(f_total);
   const Eigen::Vector3d vel_r3{propagated_state.vel_.x(),
                                propagated_state.vel_.y(), 0.0};
+  const double vel_yaw = propagated_state.vel_.z();
 
   // Send velocity reference to the locomotion controller
   geometry_msgs::TwistStamped twist_msg;
@@ -244,9 +245,43 @@ void WaveriderServer::evaluateAndPublishPolicy() {
           config_.world_frame));
       marker_array.markers.emplace_back(robotPositionToMarker(
           current_state.p().cast<float>(), config_.world_frame));
-      marker_array.markers.emplace_back(
-          velocityCommandToMarker(current_state.p().cast<float>(),
-                                  vel_r3.cast<float>(), config_.world_frame));
+      {
+        const Vector3D v_r2{static_cast<float>(vel_r3.x()),
+                            static_cast<float>(vel_r3.y()), 0.f};
+        marker_array.markers.emplace_back(
+            commandToMarker(current_state.p().cast<float>(), v_r2,
+                            config_.world_frame, "v_r2", 0.f, 0.f, 1.f));
+        const Vector3D v_yaw{0.f, 0.f, static_cast<float>(vel_yaw)};
+        marker_array.markers.emplace_back(
+            commandToMarker(current_state.p().cast<float>(), v_yaw,
+                            config_.world_frame, "v_yaw", 0.f, 0.f, 1.f));
+      }
+      {
+        const Vector3D f_attract_r2 = {
+            static_cast<float>(attractor_se2_value.f_.x()),
+            static_cast<float>(attractor_se2_value.f_.y()), 0.f};
+        marker_array.markers.emplace_back(commandToMarker(
+            current_state.p().cast<float>(), f_attract_r2, config_.world_frame,
+            "f_attract_r2", 0.f, 1.f, 0.f));
+        const Vector3D f_attract_yaw = {
+            0.f, 0.f, static_cast<float>(attractor_se2_value.f_.z())};
+        marker_array.markers.emplace_back(commandToMarker(
+            current_state.p().cast<float>(), f_attract_yaw, config_.world_frame,
+            "f_attract_yaw", 0.f, 1.f, 0.f));
+      }
+      {
+        const Vector3D f_rep_r2 = {
+            static_cast<float>(waverider_se2_value.f_.x()),
+            static_cast<float>(waverider_se2_value.f_.y()), 0.f};
+        marker_array.markers.emplace_back(
+            commandToMarker(current_state.p().cast<float>(), f_rep_r2,
+                            config_.world_frame, "f_rep_r2", 1.f, 0.f, 0.f));
+        const Vector3D f_rep_yaw = {
+            0.f, 0.f, static_cast<float>(waverider_se2_value.f_.z())};
+        marker_array.markers.emplace_back(
+            commandToMarker(current_state.p().cast<float>(), f_rep_yaw,
+                            config_.world_frame, "f_rep_yaw", 1.f, 0.f, 0.f));
+      }
       debug_pub_.publish(marker_array);
     }
   }
