@@ -9,19 +9,19 @@
        default="$(find waverider_ros)/config/alma.yaml"
        doc="Name of the file from which to read waverider's server params."/>
   <arg name="rosbag_path"
-       default="../data/alma/2024-09-03-16-47-36.bag"
+       default=""
        doc="Replay the rosbag at the specified path. Can be left blank."/>
   <!-- NOTE: Relative paths will be resolved w.r.t. ROS_HOME (default ~/.ros) -->
   <arg name="rosbag_skip_first_n_sec"
        default="0"
        doc="Skip the first n seconds of the rosbag."/>
-  <arg name="show_rviz" value="true"/>
+  <arg name="show_rviz" value="false"/>
 
   <!-- Simulate goal TF frame -->
   <node pkg="tf"
         type="static_transform_publisher"
         name="pub_goal_tf_frame"
-        args="10.0 10.0 0.0 0.0 0.0 0.0 1.000
+        args="10.0 10.0 0.6 0.0 0.0 0.0 1.000
             map waverider_goal 100"/>
 
   <!-- Run waverider -->
@@ -40,6 +40,8 @@
   </group>
 
   <!-- Replay a bag -->
-  <node pkg="rosbag" type="play" name="rosbag_play" output="screen"
-        args="-r 1.0 -s $(arg rosbag_skip_first_n_sec) -q --clock $(arg rosbag_path)"/>
+  <group unless="$(eval arg('rosbag_path') == '')">
+    <node pkg="rosbag" type="play" name="rosbag_play" output="screen"
+          args="-r 1.0 -s $(arg rosbag_skip_first_n_sec) -q --clock $(arg rosbag_path)"/>
+  </group>
 </launch>

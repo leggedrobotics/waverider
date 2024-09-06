@@ -45,7 +45,10 @@ WaveriderServer::WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private,
     : config_(config.checkValid()) {
   // Configure the policies
   waverider_policy_.setOccupancyThreshold(config_.occupancy_threshold);
-  goal_attractor_policy_.setTuning(10.0, 15.0, 0.01);
+  PolicyTuning tuning;
+  tuning.r = 1.1;
+  waverider_policy_.updateTuning(tuning);
+  goal_attractor_policy_.setTuning(20.0, 25.0, 0.2);
   goal_attractor_policy_.setA(10.0 * Eigen::Matrix3d::Identity());
 
   // Interface with ROS
@@ -197,30 +200,35 @@ void WaveriderServer::evaluateAndPublishPolicy() {
   // TODO(victorr): Place the goal attractor frame slightly in front of body,
   //                to also induce robot rotations
   auto attractor_se3_value =
-      rmpcpp::R3toSE3{}.at(robot_state_.data->r3()).pull(attractor_r3_value);
+      rmpcpp::R3toSE3{}.at(current_state.r3()).pull(attractor_r3_value);
 
   // Evaluate the static obstacle avoidance policy
   auto waverider_r3_value = waverider_policy_.evaluateAt(current_state.r3());
   auto waverider_se3_value =
-      rmpcpp::R3toSE3{}.at(robot_state_.data->r3()).pull(waverider_r3_value);
+      rmpcpp::R3toSE3{}.at(current_state.r3()).pull(waverider_r3_value);
 
   // Evaluate the dynamic obstacle avoidance policy
   // TODO(victorr): Add a policy that avoids all dynamic obstacle bounding boxes
 
   // Forward integrate the state and policy to obtain velocity reference
-  auto propagated_state = current_state;
-  propagated_state.v().setZero();  // TODO(victorr): Only for debugging, remove
+  auto propagated_state = current_state.r3();
+  // propagated_state.v().setZero();  // TODO(victorr): Only for debugging, remove
   rmpcpp::TrapezoidalIntegrator integrator{propagated_state,
                                            config_.control_period};
-  auto f_total = (attractor_se3_value + waverider_se3_value).f_;
+  auto f_total = (attractor_r3_value + waverider_r3_value).f_;
   integrator.step(f_total);
 
   // Send velocity reference to the locomotion controller
   geometry_msgs::TwistStamped twist_msg;
   twist_msg.header.stamp = ros::Time().fromNSec(prev_time_);
   twist_msg.header.frame_id = "base";
-  LOG(INFO) << "Velocity reference: " << propagated_state.v().transpose();
+  Eigen::Vector3d v_body = current_state.q().inverse() * propagated_state.vel_;
+  twist_msg.twist.linear.x = v_body.x();
+  twist_msg.twist.linear.y = v_body.y();
+  twist_msg.twist.linear.z = v_body.z();
+  // LOG(INFO) << "Velocity reference: " << propagated_state.v().transpose();
   // TODO(smauq): take the policy output and convert it to base frame
+
   policy_pub_.publish(twist_msg);
 
   // Publish debug visuals
@@ -237,7 +245,7 @@ void WaveriderServer::evaluateAndPublishPolicy() {
       marker_array.markers.emplace_back(robotPositionToMarker(
           current_state.p().cast<float>(), config_.world_frame));
       marker_array.markers.emplace_back(velocityCommandToMarker(
-          current_state.p().cast<float>(), propagated_state.v().cast<float>(),
+          current_state.p().cast<float>(), propagated_state.vel_.cast<float>(),
           config_.world_frame));
       debug_pub_.publish(marker_array);
     }
