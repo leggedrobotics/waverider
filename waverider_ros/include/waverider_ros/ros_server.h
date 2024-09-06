@@ -13,6 +13,7 @@
 #include <wavemap/core/config/value_with_unit.h>
 #include <wavemap/core/map/map_base.h>
 #include <wavemap_ros/utils/tf_transformer.h>
+#include <waverider/attractor_policy_tuning.h>
 #include <waverider/waverider_policy.h>
 
 namespace waverider {
@@ -20,7 +21,9 @@ using wavemap::FloatingPoint;
 using wavemap::SiUnit;
 using wavemap::ValueWithUnit;
 
-struct WaveriderServerConfig : wavemap::ConfigBase<WaveriderServerConfig, 8> {
+struct WaveriderServerConfig
+    : wavemap::ConfigBase<WaveriderServerConfig, 11, AttractorPolicyTuning,
+                          RepulsorPolicyTuning> {
   std::string world_frame = "odom";
 
   std::string robot_state_topic;
@@ -32,8 +35,12 @@ struct WaveriderServerConfig : wavemap::ConfigBase<WaveriderServerConfig, 8> {
   FloatingPoint occupancy_threshold = 0.1f;
 
   ValueWithUnit<SiUnit::kSeconds, FloatingPoint> control_period = 0.02f;
+  FloatingPoint control_gain = 1.f;
 
   int publish_debug_visuals_every_n_iterations = 20;
+
+  AttractorPolicyTuning attractor_tuning;
+  RepulsorPolicyTuning repulsor_tuning;
 
   static MemberMap memberMap;
 

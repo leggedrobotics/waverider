@@ -9,6 +9,7 @@ Panels:
         - /TF1/Tree1
         - /Input1/Ouster undistorted1
         - /Input1/LIO1
+        - /Map1/Render voxels1
         - /Filtered obstacles1
         - /Filtered obstacles1/Namespaces1
       Splitter Ratio: 0.943533718585968
@@ -201,7 +202,7 @@ Visualization Manager:
         Min log odds: -1e+06
         Slice height: 0
       Render voxels:
-        Alpha: 1
+        Alpha: 0.05000000074505806
         Cell selector: Surface
         Color mode: Height
         Enable: true
@@ -222,12 +223,14 @@ Visualization Manager:
       Marker Topic: /waverider_server/planner/filtered_obstacles
       Name: Filtered obstacles
       Namespaces:
+        goal: true
         level_0: true
         level_1: true
         level_2: true
         level_3: true
         level_4: true
         level_5: true
+        level_6: true
         robot: false
         velocity_command: true
       Queue Size: 100
@@ -260,7 +263,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/XYOrbit
-      Distance: 9.651510238647461
+      Distance: 28.362045288085938
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -268,17 +271,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 5.590049743652344
-        Y: 2.0047922134399414
-        Z: -9.775161743164062e-06
+        X: -0.6355726718902588
+        Y: 7.262613773345947
+        Z: -1.0251998901367188e-05
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.6997988224029541
+      Pitch: 0.8397989273071289
       Target Frame: <Fixed Frame>
-      Yaw: 4.206457138061523
+      Yaw: 1.4814382791519165
     Saved: ~
 Window Geometry:
   Displays:

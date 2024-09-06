@@ -66,10 +66,9 @@ visualization_msgs::Marker velocityCommandToMarker(
     const std::string& world_frame) {
   visualization_msgs::Marker marker;
 
-  const Vector3D grav = Vector3D::UnitX();
-  const auto q =
-      Eigen::Quaternion<FloatingPoint>::FromTwoVectors(grav, velocity_command)
-          .normalized();
+  const auto q = Eigen::Quaternion<FloatingPoint>::FromTwoVectors(
+                     Vector3D::UnitX(), velocity_command)
+                     .normalized();
   marker.pose.orientation.x = q.x();
   marker.pose.orientation.y = q.y();
   marker.pose.orientation.z = q.z();

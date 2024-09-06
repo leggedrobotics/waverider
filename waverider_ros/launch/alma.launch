@@ -15,7 +15,7 @@
   <arg name="rosbag_skip_first_n_sec"
        default="0"
        doc="Skip the first n seconds of the rosbag."/>
-  <arg name="show_rviz" value="false"/>
+  <arg name="show_rviz" default="false"/>
 
   <!-- Simulate goal TF frame -->
   <node pkg="tf"

@@ -25,11 +25,11 @@ rmpcpp::PolicyValue<3> WaveriderPolicy::evaluateAt(const rmpcpp::State<3>& x) {
   const auto& policy_cells = obstacle_filter_.getObstacleCells();
 
   std::vector<rmpcpp::PolicyValue<3>> all_policies;
-  for (size_t i = 0; i < policy_cells.cell_widths.size(); i++) {
+  for (int i = 0; i < static_cast<int>(policy_cells.cell_widths.size()); i++) {
     if (i == 0 || run_all_levels_) {
       ParallelizedPolicy pol_generator(policy_cells.centers[i].size(),
                                        policy_tuning_);
-      pol_generator.setR(WavemapObstacleFilter::maxRangeForHeight(i) * 1.5);
+      pol_generator.setR(1.5f * WavemapObstacleFilter::maxRangeForHeight(i));
 
       pol_generator.init(policy_cells.centers[i], x_pos, x_vel);
       all_policies.emplace_back(pol_generator.getPolicy());

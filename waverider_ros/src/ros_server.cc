@@ -18,8 +18,10 @@ DECLARE_CONFIG_MEMBERS(WaveriderServerConfig,
                       (tf_lookup_delay)
                       (occupancy_threshold)
                       (control_period)
+                      (control_gain)
                       (publish_debug_visuals_every_n_iterations)
-);
+                      (attractor_tuning)
+                      (repulsor_tuning));
 
 bool WaveriderServerConfig::isValid(bool verbose) const {
   bool all_valid = true;
@@ -45,11 +47,12 @@ WaveriderServer::WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private,
     : config_(config.checkValid()) {
   // Configure the policies
   waverider_policy_.setOccupancyThreshold(config_.occupancy_threshold);
-  PolicyTuning tuning;
-  tuning.r = 1.1;
-  waverider_policy_.updateTuning(tuning);
-  goal_attractor_policy_.setTuning(20.0, 25.0, 0.2);
-  goal_attractor_policy_.setA(10.0 * Eigen::Matrix3d::Identity());
+  waverider_policy_.updateTuning(config_.repulsor_tuning);
+  goal_attractor_policy_.setTuning(config_.attractor_tuning.alpha,
+                                   config_.attractor_tuning.beta,
+                                   config_.attractor_tuning.c);
+  goal_attractor_policy_.setA(config_.attractor_tuning.a *
+                              Eigen::Matrix3d::Identity());
 
   // Interface with ROS
   subscribeToTopics(nh);
@@ -212,9 +215,8 @@ void WaveriderServer::evaluateAndPublishPolicy() {
 
   // Forward integrate the state and policy to obtain velocity reference
   auto propagated_state = current_state.r3();
-  // propagated_state.v().setZero();  // TODO(victorr): Only for debugging, remove
-  rmpcpp::TrapezoidalIntegrator integrator{propagated_state,
-                                           config_.control_period};
+  rmpcpp::TrapezoidalIntegrator integrator{
+      propagated_state, config_.control_gain * config_.control_period};
   auto f_total = (attractor_r3_value + waverider_r3_value).f_;
   integrator.step(f_total);
 
@@ -226,9 +228,6 @@ void WaveriderServer::evaluateAndPublishPolicy() {
   twist_msg.twist.linear.x = v_body.x();
   twist_msg.twist.linear.y = v_body.y();
   twist_msg.twist.linear.z = v_body.z();
-  // LOG(INFO) << "Velocity reference: " << propagated_state.v().transpose();
-  // TODO(smauq): take the policy output and convert it to base frame
-
   policy_pub_.publish(twist_msg);
 
   // Publish debug visuals

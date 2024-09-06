@@ -18,8 +18,8 @@ visualization_msgs::Marker generateClearingMarker();
 visualization_msgs::Marker robotPositionToMarker(
     const Vector3D& robot_position, const std::string& world_frame);
 
-visualization_msgs::Marker goalPositionToMarker(
-    const Vector3D& robot_position, const std::string& world_frame);
+visualization_msgs::Marker goalPositionToMarker(const Vector3D& robot_position,
+                                                const std::string& world_frame);
 
 visualization_msgs::Marker velocityCommandToMarker(
     const Vector3D& robot_position, const Vector3D& velocity_command,

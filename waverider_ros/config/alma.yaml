@@ -5,4 +5,16 @@ ground_plane_tf_frame: "footprint"
 tf_lookup_delay: { "seconds": 0.05 }
 occupancy_threshold: 0.1
 control_period: { "seconds": 0.02 }
+control_gain: 2.0
 publish_debug_visuals_every_n_iterations: 20
+attractor_tuning:
+  alpha: 20.0
+  beta: 25.0
+  c: 0.2
+  a: 10.0
+repulsor_tuning:
+  c: 0.2
+  eta_rep: 22.0
+  eta_damp: 140.0
+  enable_damper: true
+  enable_repulsor: true

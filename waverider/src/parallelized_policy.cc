@@ -1,8 +1,9 @@
 #include "waverider/parallelized_policy.h"
 
 namespace waverider {
-ParallelizedPolicy::ParallelizedPolicy(uint num_policies, PolicyTuning tuning)
-    : tuning_(tuning), num_policies_(num_policies) {}
+ParallelizedPolicy::ParallelizedPolicy(uint num_policies,
+                                       RepulsorPolicyTuning tuning)
+    : tuning_(std::move(tuning)), num_policies_(num_policies) {}
 
 void ParallelizedPolicy::init(const std::vector<Eigen::Vector3f>& x_obs,
                               const Eigen::Vector3f& x,

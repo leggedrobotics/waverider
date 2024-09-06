@@ -40,9 +40,8 @@ class WavemapObstacleFilter {
 
   bool use_only_lowest_level_ = false;
   double lowest_level_radius_{3.0};
-  static double maxRangeForHeight(int level) {
-    return std::pow(3, level / 3.0) - 0.25;
-    // return std::exp((level + 1.0) / 2.0);
+  static FloatingPoint maxRangeForHeight(int level) {
+    return std::pow(3.f, static_cast<FloatingPoint>(level) / 3.f) - 0.25f;
   }
 
  private:
