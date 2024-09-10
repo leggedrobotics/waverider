@@ -7,6 +7,7 @@
 #include <wavemap/core/utils/profiler_interface.h>
 #include <wavemap_ros_conversions/config_conversions.h>
 #include <waverider/geometry.h>
+#include <waverider/yaw_policy.h>
 
 #include "waverider_ros/policy_visuals.h"
 
@@ -19,11 +20,10 @@ DECLARE_CONFIG_MEMBERS(WaveriderServerConfig,
                       (tf_lookup_delay)
                       (occupancy_threshold)
                       (control_period)
-                      (control_gain)
+                      (integrator_step_size)
                       (publish_debug_visuals_every_n_iterations)
-                      (attractor_x_offset)
-                      (attractor_yaw_gain)
                       (attractor_tuning)
+                      (yaw_tuning)
                       (repulsor_tuning));
 
 bool WaveriderServerConfig::isValid(bool verbose) const {
@@ -49,13 +49,20 @@ WaveriderServer::WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private,
                                  const WaveriderServerConfig& config)
     : config_(config.checkValid()) {
   // Configure the policies
-  waverider_policy_.setOccupancyThreshold(config_.occupancy_threshold);
-  waverider_policy_.updateTuning(config_.repulsor_tuning);
   goal_attractor_policy_.setTuning(config_.attractor_tuning.alpha,
                                    config_.attractor_tuning.beta,
                                    config_.attractor_tuning.c);
   goal_attractor_policy_.setA(config_.attractor_tuning.a *
                               Eigen::Matrix3d::Identity());
+  {
+    YawPolicy::Matrix A_yaw = YawPolicy::Matrix::Zero();
+    A_yaw(2, 2) = config_.yaw_tuning.a;
+    yaw_policy_.setA(A_yaw);
+  }
+  yaw_policy_.setTuning(config_.yaw_tuning.alpha, config_.yaw_tuning.beta,
+                        config_.yaw_tuning.c);
+  waverider_policy_.setOccupancyThreshold(config_.occupancy_threshold);
+  waverider_policy_.updateTuning(config_.repulsor_tuning);
 
   // Interface with ROS
   subscribeToTopics(nh);
@@ -198,97 +205,126 @@ void WaveriderServer::evaluateAndPublishPolicy() {
     goal_attractor_policy_.setTarget(goal->cast<double>());
   }
 
-  // Evaluate the goal attraction policy
-  auto attractor_r3_value =
-      goal_attractor_policy_.evaluateAt(current_state.r3());
-  auto attractor_se2_offset_value =
-      R3toSE2{}.at(current_state.r3()).pull(attractor_r3_value);
-  auto attractor_se2_value = SE2toSE2Translated{config_.attractor_x_offset}
-                                 .at(SE3toSE2(current_state))
-                                 .pull(attractor_se2_offset_value);
-
-  // Evaluate the static obstacle avoidance policy
-  auto waverider_r3_value = waverider_policy_.evaluateAt(current_state.r3());
-  auto waverider_se2_value =
-      R3toSE2{}.at(current_state.r3()).pull(waverider_r3_value);
-
-  // Evaluate the dynamic obstacle avoidance policy
-  // TODO(victorr): Add a policy that avoids all dynamic obstacle bounding boxes
-
   // Forward integrate the state and policy to obtain velocity reference
   auto propagated_state = SE3toSE2(current_state);
-  rmpcpp::TrapezoidalIntegrator integrator{
-      propagated_state, config_.control_gain * config_.control_period};
-  auto f_total = (attractor_se2_value + waverider_se2_value).f_;
-  integrator.step(f_total);
-  const Eigen::Vector3d vel_r3{propagated_state.vel_.x(),
-                               propagated_state.vel_.y(), 0.0};
-  const double vel_yaw = config_.attractor_yaw_gain * propagated_state.vel_.z();
+  rmpcpp::TrapezoidalIntegrator integrator{propagated_state,
+                                           config_.integrator_step_size};
+  const int num_integrator_steps =
+      std::ceil(config_.control_period / config_.integrator_step_size);
+  for (int step_idx = 0; step_idx < num_integrator_steps; ++step_idx) {
+    // Reconstruct R3 state
+    auto propagated_state_r3 = R3toSE2{}.convertToQ(propagated_state);
+    propagated_state_r3.pos_.z() = current_state.p().z();
+    propagated_state_r3.vel_.z() = current_state.v().z();
+    propagated_state_r3.acc_.z() = current_state.a().z();
+
+    // Evaluate the goal attraction policy
+    auto attractor_r3_value =
+        goal_attractor_policy_.evaluateAt(propagated_state_r3);
+    auto attractor_se2_value =
+        R3toSE2{}.at(propagated_state_r3).pull(attractor_r3_value);
+
+    // Evaluate the yaw policy
+    auto yaw_se2_value = yaw_policy_.evaluateAt(propagated_state);
+
+    // Evaluate the static obstacle avoidance policy
+    auto waverider_r3_value = waverider_policy_.evaluateAt(propagated_state_r3);
+    auto waverider_se2_value =
+        R3toSE2{}.at(propagated_state_r3).pull(waverider_r3_value);
+
+    // Evaluate the dynamic obstacle avoidance policy
+    // TODO(victorr): Add a policy that avoids all dynamic obstacle AABBs
+
+    // Apply the policies by integrating their commanded accelerations
+    auto f_total =
+        (attractor_se2_value + yaw_se2_value + waverider_se2_value).f_;
+    integrator.step(f_total);
+
+    // Publish debug visuals
+    if (step_idx == num_integrator_steps - 1) {
+      static int i = 0;
+      if (++i % config_.publish_debug_visuals_every_n_iterations == 0) {
+        visualization_msgs::MarkerArray marker_array;
+        addFilteredObstaclesToMarkerArray(waverider_policy_.getObstacleCells(),
+                                          config_.world_frame, marker_array);
+        marker_array.markers.emplace_back(goalPositionToMarker(
+            goal_attractor_policy_.target().cast<FloatingPoint>(),
+            config_.world_frame));
+        marker_array.markers.emplace_back(robotPositionToMarker(
+            current_state.p().cast<float>(), config_.world_frame));
+        {
+          const Vector3D v_r2{static_cast<float>(propagated_state.vel_.x()),
+                              static_cast<float>(propagated_state.vel_.y()),
+                              0.f};
+          marker_array.markers.emplace_back(
+              commandToMarker(current_state.p().cast<float>(), v_r2,
+                              config_.world_frame, "v_r2", 0.f, 0.f, 1.f));
+          const Vector3D v_yaw{0.f, 0.f,
+                               static_cast<float>(propagated_state.vel_[2])};
+          marker_array.markers.emplace_back(
+              commandToMarker(current_state.p().cast<float>(), v_yaw,
+                              config_.world_frame, "v_yaw", 0.f, 0.f, 1.f));
+        }
+        {
+          const Vector3D f_attract_r2 = {
+              static_cast<float>(attractor_se2_value.f_.x()),
+              static_cast<float>(attractor_se2_value.f_.y()), 0.f};
+          marker_array.markers.emplace_back(commandToMarker(
+              current_state.p().cast<float>(), f_attract_r2,
+              config_.world_frame, "f_attract_r2", 0.f, 1.f, 0.f));
+          const Vector3D f_attract_yaw = {
+              0.f, 0.f, static_cast<float>(attractor_se2_value.f_.z())};
+          marker_array.markers.emplace_back(commandToMarker(
+              current_state.p().cast<float>(), f_attract_yaw,
+              config_.world_frame, "f_attract_yaw", 0.f, 1.f, 0.f));
+        }
+        {
+          const Vector3D f_yaw_r2 = {static_cast<float>(yaw_se2_value.f_.x()),
+                                     static_cast<float>(yaw_se2_value.f_.y()),
+                                     0.f};
+          marker_array.markers.emplace_back(
+              commandToMarker(current_state.p().cast<float>(), f_yaw_r2,
+                              config_.world_frame, "f_yaw_r2", 1.f, 1.f, 0.f));
+          const Vector3D f_yaw_yaw = {0.f, 0.f,
+                                      static_cast<float>(yaw_se2_value.f_.z())};
+          marker_array.markers.emplace_back(
+              commandToMarker(current_state.p().cast<float>(), f_yaw_yaw,
+                              config_.world_frame, "f_yaw_yaw", 1.f, 1.f, 0.f));
+        }
+        {
+          const Vector3D f_rep_r2 = {
+              static_cast<float>(waverider_se2_value.f_.x()),
+              static_cast<float>(waverider_se2_value.f_.y()), 0.f};
+          marker_array.markers.emplace_back(
+              commandToMarker(current_state.p().cast<float>(), f_rep_r2,
+                              config_.world_frame, "f_rep_r2", 1.f, 0.f, 0.f));
+          const Vector3D f_rep_yaw = {
+              0.f, 0.f, static_cast<float>(waverider_se2_value.f_.z())};
+          marker_array.markers.emplace_back(
+              commandToMarker(current_state.p().cast<float>(), f_rep_yaw,
+                              config_.world_frame, "f_rep_yaw", 1.f, 0.f, 0.f));
+        }
+        debug_pub_.publish(marker_array);
+      }
+    }
+  }
+
+  // Compute velocity reference
+  const Eigen::Vector2d vel_r2 = propagated_state.vel_.head<2>();
+  const double yaw = propagated_state.pos_[2];
+  Eigen::Vector3d v_body = Eigen::Vector3d::Zero();
+  v_body.head<2>() = Eigen::Rotation2Dd{yaw}.inverse() * vel_r2;
+  const double vel_yaw = propagated_state.vel_[2];
 
   // Send velocity reference to the locomotion controller
   geometry_msgs::TwistStamped twist_msg;
   twist_msg.header.stamp = ros::Time().fromNSec(prev_time_);
   twist_msg.header.frame_id = "base";
-  Eigen::Vector3d v_body = current_state.q().inverse() * vel_r3;
   twist_msg.twist.linear.x = v_body.x();
   twist_msg.twist.linear.y = v_body.y();
   twist_msg.twist.linear.z = v_body.z();
   twist_msg.twist.angular.z = vel_yaw;
   policy_pub_.publish(twist_msg);
-
-  // Publish debug visuals
-  {
-    static int i = 0;
-    if (++i % config_.publish_debug_visuals_every_n_iterations == 0) {
-      visualization_msgs::MarkerArray marker_array;
-      // marker_array.markers.emplace_back(generateClearingMarker());
-      addFilteredObstaclesToMarkerArray(waverider_policy_.getObstacleCells(),
-                                        config_.world_frame, marker_array);
-      marker_array.markers.emplace_back(goalPositionToMarker(
-          goal_attractor_policy_.target().cast<FloatingPoint>(),
-          config_.world_frame));
-      marker_array.markers.emplace_back(robotPositionToMarker(
-          current_state.p().cast<float>(), config_.world_frame));
-      {
-        const Vector3D v_r2{static_cast<float>(vel_r3.x()),
-                            static_cast<float>(vel_r3.y()), 0.f};
-        marker_array.markers.emplace_back(
-            commandToMarker(current_state.p().cast<float>(), v_r2,
-                            config_.world_frame, "v_r2", 0.f, 0.f, 1.f));
-        const Vector3D v_yaw{0.f, 0.f, static_cast<float>(vel_yaw)};
-        marker_array.markers.emplace_back(
-            commandToMarker(current_state.p().cast<float>(), v_yaw,
-                            config_.world_frame, "v_yaw", 0.f, 0.f, 1.f));
-      }
-      {
-        const Vector3D f_attract_r2 = {
-            static_cast<float>(attractor_se2_value.f_.x()),
-            static_cast<float>(attractor_se2_value.f_.y()), 0.f};
-        marker_array.markers.emplace_back(commandToMarker(
-            current_state.p().cast<float>(), f_attract_r2, config_.world_frame,
-            "f_attract_r2", 0.f, 1.f, 0.f));
-        const Vector3D f_attract_yaw = {
-            0.f, 0.f, static_cast<float>(attractor_se2_value.f_.z())};
-        marker_array.markers.emplace_back(commandToMarker(
-            current_state.p().cast<float>(), f_attract_yaw, config_.world_frame,
-            "f_attract_yaw", 0.f, 1.f, 0.f));
-      }
-      {
-        const Vector3D f_rep_r2 = {
-            static_cast<float>(waverider_se2_value.f_.x()),
-            static_cast<float>(waverider_se2_value.f_.y()), 0.f};
-        marker_array.markers.emplace_back(
-            commandToMarker(current_state.p().cast<float>(), f_rep_r2,
-                            config_.world_frame, "f_rep_r2", 1.f, 0.f, 0.f));
-        const Vector3D f_rep_yaw = {
-            0.f, 0.f, static_cast<float>(waverider_se2_value.f_.z())};
-        marker_array.markers.emplace_back(
-            commandToMarker(current_state.p().cast<float>(), f_rep_yaw,
-                            config_.world_frame, "f_rep_yaw", 1.f, 0.f, 0.f));
-      }
-      debug_pub_.publish(marker_array);
-    }
-  }
 }
 
 void WaveriderServer::subscribeToTopics(ros::NodeHandle& nh) {

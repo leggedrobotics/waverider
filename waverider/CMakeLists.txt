@@ -7,6 +7,7 @@ catkin_simple(ALL_DEPS_REQUIRED)
 # Libraries
 cs_add_library(${PROJECT_NAME}
     src/attractor_policy_tuning.cc
+    src/yaw_policy_tuning.cc
     src/obstacle_filter.cc
     src/parallelized_policy.cc
     src/repulsor_policy_tuning.cc

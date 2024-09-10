@@ -15,6 +15,8 @@
 #include <wavemap_ros/utils/tf_transformer.h>
 #include <waverider/attractor_policy_tuning.h>
 #include <waverider/waverider_policy.h>
+#include <waverider/yaw_policy.h>
+#include <waverider/yaw_policy_tuning.h>
 
 namespace waverider {
 using wavemap::FloatingPoint;
@@ -22,8 +24,8 @@ using wavemap::SiUnit;
 using wavemap::ValueWithUnit;
 
 struct WaveriderServerConfig
-    : wavemap::ConfigBase<WaveriderServerConfig, 13, AttractorPolicyTuning,
-                          RepulsorPolicyTuning> {
+    : wavemap::ConfigBase<WaveriderServerConfig, 12, AttractorPolicyTuning,
+                          YawPolicyTuning, RepulsorPolicyTuning> {
   std::string world_frame = "odom";
 
   std::string robot_state_topic;
@@ -35,13 +37,12 @@ struct WaveriderServerConfig
   FloatingPoint occupancy_threshold = 0.1f;
 
   ValueWithUnit<SiUnit::kSeconds, FloatingPoint> control_period = 0.02f;
-  FloatingPoint control_gain = 1.f;
+  ValueWithUnit<SiUnit::kSeconds, FloatingPoint> integrator_step_size = 0.005f;
 
   int publish_debug_visuals_every_n_iterations = 20;
 
-  ValueWithUnit<SiUnit::kMeters, FloatingPoint> attractor_x_offset = 0.2f;
-  FloatingPoint attractor_yaw_gain = 0.1f;
   AttractorPolicyTuning attractor_tuning;
+  AttractorPolicyTuning yaw_tuning;
   RepulsorPolicyTuning repulsor_tuning;
 
   static MemberMap memberMap;
@@ -73,8 +74,9 @@ class WaveriderServer {
   } robot_state_;
 
   // Wavemap-based obstacle avoidance policy
-  WaveriderPolicy waverider_policy_;
   rmpcpp::SimpleTargetPolicy<rmpcpp::Space<3>> goal_attractor_policy_;
+  YawPolicy yaw_policy_;
+  WaveriderPolicy waverider_policy_;
 
   // Asynchronous policy publishing logic
   std::atomic<bool> continue_async_planning_{false};
