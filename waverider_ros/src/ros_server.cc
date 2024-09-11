@@ -156,9 +156,9 @@ void WaveriderServer::robotStateCallback(anymal_msgs::AnymalState robot_state_ms
     robot_state_.data->p() = t_odom_body_ref;
     robot_state_.data->q() = R_odom_body_ref;
     robot_state_.data->v() = R_odom_body_ref * v;
-    robot_state_.data->a() = R_odom_body_ref * vdot;
     robot_state_.data->w() = R_odom_body_ref * w;
-    robot_state_.data->dw() = R_odom_body_ref * wdot;
+    robot_state_.data->a().setZero();// = R_odom_body_ref * vdot;
+    robot_state_.data->dw().setZero();// = R_odom_body_ref * wdot;
   }
 
   prev_time_ = curr_time;
@@ -207,6 +207,8 @@ void WaveriderServer::evaluateAndPublishPolicy() {
 
   // Forward integrate the state and policy to obtain velocity reference
   auto propagated_state = SE3toSE2(current_state);
+  const double yaw_init = propagated_state.pos_.z();
+  const double yaw_dot_init = propagated_state.vel_.z();
   rmpcpp::TrapezoidalIntegrator integrator{propagated_state,
                                            config_.integrator_step_size};
   const int num_integrator_steps =
@@ -310,9 +312,13 @@ void WaveriderServer::evaluateAndPublishPolicy() {
   }
 
   // Compute velocity reference
-  const double yaw = propagated_state.pos_[2];
-  Eigen::Vector3d v_body = current_state.q().inverse() * Eigen::Vector3d{propagated_state.vel_.x(), propagated_state.vel_.y(), 0.0};
-  const double vel_yaw = propagated_state.vel_[2];
+  // LOG(INFO) << "yaw before " << yaw_init << " after " << propagated_state.pos_.z();
+  // LOG(INFO) << "yaw_dot before " << yaw_dot_init << " after " << propagated_state.vel_.z();
+  Eigen::Vector3d v_body = current_state.q().inverse() *
+                     Eigen::Vector3d{propagated_state.vel_.x(),
+                                     propagated_state.vel_.y(),
+                                     0.0};
+  const double vel_yaw = propagated_state.vel_.z();
 
   // Send velocity reference to the locomotion controller
   geometry_msgs::TwistStamped twist_msg;
@@ -321,7 +327,7 @@ void WaveriderServer::evaluateAndPublishPolicy() {
   twist_msg.twist.linear.x = v_body.x();
   twist_msg.twist.linear.y = v_body.y();
   twist_msg.twist.linear.z = v_body.z();
-  twist_msg.twist.angular.z = 0.0; //vel_yaw;
+  twist_msg.twist.angular.z = vel_yaw;
   policy_pub_.publish(twist_msg);
 }
 
