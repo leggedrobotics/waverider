@@ -18,6 +18,7 @@ DECLARE_CONFIG_MEMBERS(WaveriderServerConfig,
                       (goal_tf_frame)
                       (ground_plane_tf_frame)
                       (tf_lookup_delay)
+                      (ground_plane_offset)
                       (occupancy_threshold)
                       (control_period)
                       (integrator_step_size)
@@ -116,7 +117,8 @@ void WaveriderServer::startPlanningAsync() {
       std::thread(&WaveriderServer::asyncPlanningLoop, this);
 }
 
-void WaveriderServer::robotStateCallback(anymal_msgs::AnymalState robot_state_msg) {
+void WaveriderServer::robotStateCallback(
+    anymal_msgs::AnymalState robot_state_msg) {
   ProfilerZoneScoped;
 
   uint64_t curr_time = robot_state_msg.header.stamp.toNSec();
@@ -157,8 +159,8 @@ void WaveriderServer::robotStateCallback(anymal_msgs::AnymalState robot_state_ms
     robot_state_.data->q() = R_odom_body_ref;
     robot_state_.data->v() = R_odom_body_ref * v;
     robot_state_.data->w() = R_odom_body_ref * w;
-    robot_state_.data->a().setZero();// = R_odom_body_ref * vdot;
-    robot_state_.data->dw().setZero();// = R_odom_body_ref * wdot;
+    robot_state_.data->a().setZero();   // = R_odom_body_ref * vdot;
+    robot_state_.data->dw().setZero();  // = R_odom_body_ref * wdot;
   }
 
   prev_time_ = curr_time;
@@ -312,12 +314,12 @@ void WaveriderServer::evaluateAndPublishPolicy() {
   }
 
   // Compute velocity reference
-  // LOG(INFO) << "yaw before " << yaw_init << " after " << propagated_state.pos_.z();
-  // LOG(INFO) << "yaw_dot before " << yaw_dot_init << " after " << propagated_state.vel_.z();
+  // LOG(INFO) << "yaw before " << yaw_init << " after " <<
+  // propagated_state.pos_.z(); LOG(INFO) << "yaw_dot before " << yaw_dot_init
+  // << " after " << propagated_state.vel_.z();
   Eigen::Vector3d v_body = current_state.q().inverse() *
-                     Eigen::Vector3d{propagated_state.vel_.x(),
-                                     propagated_state.vel_.y(),
-                                     0.0};
+                           Eigen::Vector3d{propagated_state.vel_.x(),
+                                           propagated_state.vel_.y(), 0.0};
   const double vel_yaw = propagated_state.vel_.z();
 
   // Send velocity reference to the locomotion controller
@@ -364,7 +366,8 @@ std::optional<Plane3D> WaveriderServer::getGroundPlaneFromTf() {
                                    T_W_G)) {
     Plane3D ground_plane;
     ground_plane.normal = T_W_G.getRotation().rotate(Vector3D::UnitZ());
-    ground_plane.offset = ground_plane.normal.dot(T_W_G.getPosition());
+    ground_plane.offset = ground_plane.normal.dot(T_W_G.getPosition()) +
+                          config_.ground_plane_offset;
     return ground_plane;
   }
   return std::nullopt;

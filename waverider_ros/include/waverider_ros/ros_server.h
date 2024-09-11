@@ -24,7 +24,7 @@ using wavemap::SiUnit;
 using wavemap::ValueWithUnit;
 
 struct WaveriderServerConfig
-    : wavemap::ConfigBase<WaveriderServerConfig, 12, AttractorPolicyTuning,
+    : wavemap::ConfigBase<WaveriderServerConfig, 13, AttractorPolicyTuning,
                           YawPolicyTuning, RepulsorPolicyTuning> {
   std::string world_frame = "odom";
 
@@ -33,6 +33,7 @@ struct WaveriderServerConfig
   std::string goal_tf_frame;
   std::string ground_plane_tf_frame;
   ValueWithUnit<SiUnit::kSeconds, FloatingPoint> tf_lookup_delay = 0.05f;
+  FloatingPoint ground_plane_offset = 0.f;
 
   FloatingPoint occupancy_threshold = 0.1f;
 
