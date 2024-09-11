@@ -7,9 +7,10 @@ occupancy_threshold: 0.1
 control_period: { "seconds": 0.02 }
 integrator_step_size: { "seconds": 0.005 }
 publish_debug_visuals_every_n_iterations: 20
+ground_plane_offset: 0.10
 attractor_tuning:
-  alpha: 15.0
-  beta: 20.0
+  alpha: 25.0 # TODO(victorr): Set alpha to zero once close to goal
+  beta: 35.0
   c: 0.2
   a: 20.0
 yaw_tuning:
@@ -18,8 +19,8 @@ yaw_tuning:
   c: 0.1
   a: 20.0
 repulsor_tuning:
-  c: 0.2
-  eta_rep: 22.0
-  eta_damp: 140.0
+  c: 0.1
+  eta_rep: 30.0
+  eta_damp: 340.0
   enable_damper: true
   enable_repulsor: true
