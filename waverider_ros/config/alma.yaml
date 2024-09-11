@@ -1,5 +1,5 @@
 world_frame: "map"
-robot_state_topic: "/state_estimator/alma_state"
+robot_state_topic: "/state_estimator/anymal_state"
 goal_tf_frame: "waverider_goal"
 ground_plane_tf_frame: "footprint"
 tf_lookup_delay: { "seconds": 0.05 }
@@ -13,10 +13,10 @@ attractor_tuning:
   c: 0.2
   a: 20.0
 yaw_tuning:
-  alpha: 1.5
-  beta: 2.0
-  c: 0.1
-  a: 20.0
+  alpha: 0.0
+  beta: 0.0
+  c: 0.0
+  a: 0.0
 repulsor_tuning:
   c: 0.2
   eta_rep: 22.0

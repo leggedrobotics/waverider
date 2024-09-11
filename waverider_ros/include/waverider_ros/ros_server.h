@@ -4,7 +4,7 @@
 #include <string>
 #include <thread>
 
-#include <alma_msgs/AlmaState.h>
+#include <anymal_msgs/AnymalState.h>
 #include <rmpcpp/policies/simple_target_policy.h>
 #include <ros/ros.h>
 #include <std_srvs/Empty.h>
@@ -63,7 +63,7 @@ class WaveriderServer {
     continue_async_planning_.store(false, std::memory_order_relaxed);
   }
 
-  void robotStateCallback(alma_msgs::AlmaState robot_state_msg);
+  void robotStateCallback(anymal_msgs::AnymalState robot_state_msg);
 
  private:
   const WaveriderServerConfig config_;

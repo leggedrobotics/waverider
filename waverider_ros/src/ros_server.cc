@@ -116,7 +116,7 @@ void WaveriderServer::startPlanningAsync() {
       std::thread(&WaveriderServer::asyncPlanningLoop, this);
 }
 
-void WaveriderServer::robotStateCallback(alma_msgs::AlmaState robot_state_msg) {
+void WaveriderServer::robotStateCallback(anymal_msgs::AnymalState robot_state_msg) {
   ProfilerZoneScoped;
 
   uint64_t curr_time = robot_state_msg.header.stamp.toNSec();
@@ -310,10 +310,8 @@ void WaveriderServer::evaluateAndPublishPolicy() {
   }
 
   // Compute velocity reference
-  const Eigen::Vector2d vel_r2 = propagated_state.vel_.head<2>();
   const double yaw = propagated_state.pos_[2];
-  Eigen::Vector3d v_body = Eigen::Vector3d::Zero();
-  v_body.head<2>() = Eigen::Rotation2Dd{yaw}.inverse() * vel_r2;
+  Eigen::Vector3d v_body = current_state.q().inverse() * Eigen::Vector3d{propagated_state.vel_.x(), propagated_state.vel_.y(), 0.0};
   const double vel_yaw = propagated_state.vel_[2];
 
   // Send velocity reference to the locomotion controller
@@ -323,7 +321,7 @@ void WaveriderServer::evaluateAndPublishPolicy() {
   twist_msg.twist.linear.x = v_body.x();
   twist_msg.twist.linear.y = v_body.y();
   twist_msg.twist.linear.z = v_body.z();
-  twist_msg.twist.angular.z = vel_yaw;
+  twist_msg.twist.angular.z = 0.0; //vel_yaw;
   policy_pub_.publish(twist_msg);
 }
 
@@ -334,7 +332,7 @@ void WaveriderServer::subscribeToTopics(ros::NodeHandle& nh) {
 
 void WaveriderServer::advertiseTopics(ros::NodeHandle& nh_private) {
   policy_pub_ = nh_private.advertise<geometry_msgs::TwistStamped>(
-      "/base_tracker/commanded_twist", 1);
+      "/path_planning_and_following/twist", 1);
   // Advertise debug visuals
   debug_pub_ = nh_private.advertise<visualization_msgs::MarkerArray>(
       "filtered_obstacles", 1);

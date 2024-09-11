@@ -1,9 +1,9 @@
 <launch>
-  <param name="/use_sim_time" value="true"/>
+  <!--param name="/use_sim_time" value="true"/ -->
 
   <!-- Params -->
   <arg name="wavemap_param_file"
-       default="$(find wavemap_ros)/config/wavemap_anymal_sim.yaml"
+       default="$(find wavemap_ros)/config/wavemap_anymal_d039.yaml"
        doc="Name of the file from which to read wavemap's server params."/>
   <arg name="waverider_param_file"
        default="$(find waverider_ros)/config/alma.yaml"
@@ -18,11 +18,11 @@
   <arg name="show_rviz" default="false"/>
 
   <!-- Simulate goal TF frame -->
-  <node pkg="tf"
+  <!-- node pkg="tf"
         type="static_transform_publisher"
         name="pub_goal_tf_frame"
         args="10.0 10.0 0.6 0.0 0.0 0.0 1.000
-            map waverider_goal 100"/>
+            map waverider_goal 100"/ -->
 
   <!-- Run waverider -->
   <node name="waverider_server" pkg="waverider_ros"
