@@ -310,10 +310,10 @@ void WaveriderServer::evaluateAndPublishPolicy() {
   }
 
   // Compute velocity reference
-  const Eigen::Vector2d vel_r2 = propagated_state.vel_.head<2>();
   const double yaw = propagated_state.pos_[2];
   Eigen::Vector3d v_body = Eigen::Vector3d::Zero();
-  v_body.head<2>() = Eigen::Rotation2Dd{yaw}.inverse() * vel_r2;
+  v_body.head<2>() = Eigen::Rotation2Dd{yaw}.inverse().toRotationMatrix() *
+                     propagated_state.vel_.head<2>();
   const double vel_yaw = propagated_state.vel_[2];
 
   // Send velocity reference to the locomotion controller

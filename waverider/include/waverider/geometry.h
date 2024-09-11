@@ -58,7 +58,7 @@ class SE2toSE2Translated : public rmpcpp::GeometryBase<3, 3> {
 };
 
 inline rmpcpp::State<3> SE3toSE2(rmpcpp::SE3State se3_state) {
-  const double yaw = se3_state.q().vec().z();
+  const double yaw = se3_state.q().toRotationMatrix().eulerAngles(0, 1, 2).z();
   const double yaw_dot = se3_state.w().z();
   rmpcpp::State<3>::Vector x{se3_state.pos_.x(), se3_state.pos_.y(), yaw};
   rmpcpp::State<3>::Vector x_dot{se3_state.vel_.x(), se3_state.vel_.y(),

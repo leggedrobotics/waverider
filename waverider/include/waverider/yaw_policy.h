@@ -1,6 +1,8 @@
 #ifndef WAVERIDER_YAW_POLICY_H_
 #define WAVERIDER_YAW_POLICY_H_
 
+#include <algorithm>
+
 #include "rmpcpp/core/policy_base.h"
 
 namespace waverider {
@@ -20,12 +22,14 @@ class YawPolicy : public rmpcpp::PolicyBase<rmpcpp::Space<3>> {
   }
 
   virtual PValue evaluateAt(const PState& state) {
-    const double yaw_current = state.pos_[2];
-    const double yaw_desired = std::atan2(state.vel_.y(), state.vel_.x());
-    const double yaw_error = wrapAngle(yaw_desired - yaw_current);
+    const double speed = state.vel_.head<2>().norm();
+    const double alpha_scaled = alpha_ * std::min(speed, 1.0);
+    const double yaw = state.pos_[2];
+    const double yaw_target = std::atan2(state.vel_.y(), state.vel_.x());
+    const double yaw_error = wrapAngle(yaw_target - yaw);
     const Eigen::Vector3d error{0.0, 0.0, yaw_error};
-    const Eigen::Vector3d vel{0.0, 0.0, state.vel_[2]};
-    Vector f = alpha_ * s(error) - beta_ * vel;
+    const Eigen::Vector3d v{0.0, 0.0, state.vel_[2]};
+    Vector f = alpha_scaled * s(error) - beta_ * v;
     return {f, A_static_};
   }
 
@@ -33,16 +37,16 @@ class YawPolicy : public rmpcpp::PolicyBase<rmpcpp::Space<3>> {
   /**
    *  Normalization helper function.
    */
-  inline Vector s(Vector x) { return x / h(space_.norm(x)); }
+  Vector s(Vector x) { return x / h(space_.norm(x)); }
 
   /**
    * Softmax helper function
    */
-  inline double h(const double z) const {
-    return (z + c_ * log(1 + exp(-2 * c_ * z)));
+  double h(const double z) const {
+    return z + c_ * std::log(1.0 + exp(-2.0 * c_ * z));
   }
 
-  inline double wrapAngle(double x) const {
+  static double wrapAngle(double x) {
     x = std::fmod(x + M_PI, 2.0 * M_PI);
     if (x < 0.0) x += 2.0 * M_PI;
     return x - M_PI;
