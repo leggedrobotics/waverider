@@ -5,16 +5,9 @@ ParallelizedPolicy::ParallelizedPolicy(uint num_policies,
                                        ObstaclePolicyTuning tuning)
     : tuning_(std::move(tuning)), num_policies_(num_policies) {}
 
-void ParallelizedPolicy::init(const std::vector<Eigen::Vector3f>& x_obs,
-                              const Eigen::Vector3f& x,
-                              const Eigen::Vector3f& xdot) {
-  const float r = tuning_.r;
-  const float nu_rep = tuning_.nu_rep;
-  const float eta_rep = tuning_.eta_rep;
-
-  const float nu_damp = tuning_.nu_damp;
-  const float eta_damp = tuning_.eta_damp;
-
+void ParallelizedPolicy::evaluate(const std::vector<Eigen::Vector3f>& x_obs,
+                                  const Eigen::Vector3f& x,
+                                  const Eigen::Vector3f& xdot) {
   for (uint i = 0; i < num_policies_; ++i) {
     // normalize gradient
     Eigen::Vector3f grad_d = x - x_obs[i];
@@ -22,16 +15,18 @@ void ParallelizedPolicy::init(const std::vector<Eigen::Vector3f>& x_obs,
     grad_d.normalize();
 
     // calculate repulsive part (f_rep)
-    const double alpha_rep = eta_rep * exp(-(d_x / nu_rep));
+    const double alpha_rep =
+        tuning_.eta_rep * std::exp(-(d_x / tuning_.nu_rep));
     const Eigen::Vector3f f_rep = alpha_rep * grad_d;
 
     // calculate dampening part (f_damp)
     const double epsilon = 1e-6;  // Added term for numerical stability
-    const double alpha_damp = eta_damp / ((d_x / nu_damp) + epsilon);
+    const double alpha_damp =
+        tuning_.eta_damp / ((d_x / tuning_.nu_damp) + epsilon);
 
     // eq 68 in RMP paper
     const Eigen::Vector3f P_obs_x = std::max(0.0f, -xdot.dot(grad_d)) *
-                                    (grad_d * grad_d.transpose()) * (xdot);
+                                    (grad_d * grad_d.transpose()) * xdot;
     const Eigen::Vector3f f_damp = alpha_damp * P_obs_x;
 
     // set f
@@ -46,12 +41,18 @@ void ParallelizedPolicy::init(const std::vector<Eigen::Vector3f>& x_obs,
     // calculation of metric
     // transpose should work outside s() as well
     const Eigen::Vector3f v = s(f_temp);
-    Eigen::Matrix3f A_temp =
-        wr(static_cast<float>(d_x), r) * (v * v.transpose());
+    const Eigen::Matrix3f A_temp =
+        wr(static_cast<float>(d_x), tuning_.r) * (v * v.transpose());
 
     // set A
     A_sum += A_temp;
-    Af_sum += (A_temp * f_temp);
+    Af_sum += A_temp * f_temp;
   }
+}
+
+rmpcpp::PolicyValue<3> ParallelizedPolicy::getResult() {
+  return {(A_sum.completeOrthogonalDecomposition().pseudoInverse() * Af_sum)
+              .cast<double>(),
+          A_sum.cast<double>()};
 }
 }  // namespace waverider

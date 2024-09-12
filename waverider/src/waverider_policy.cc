@@ -31,8 +31,8 @@ rmpcpp::PolicyValue<3> WaveriderPolicy::evaluateAt(const rmpcpp::State<3>& x) {
                                        policy_tuning_);
       pol_generator.setR(1.5f * WavemapObstacleFilter::maxRangeForHeight(i));
 
-      pol_generator.init(policy_cells.centers[i], x_pos, x_vel);
-      all_policies.emplace_back(pol_generator.getPolicy());
+      pol_generator.evaluate(policy_cells.centers[i], x_pos, x_vel);
+      all_policies.emplace_back(pol_generator.getResult());
     }
   }
 
