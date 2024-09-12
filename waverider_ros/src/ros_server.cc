@@ -13,7 +13,7 @@
 
 namespace waverider {
 DECLARE_CONFIG_MEMBERS(WaveriderServerConfig,
-                      (world_frame)
+                      (odom_frame)
                       (robot_state_topic)
                       (goal_tf_frame)
                       (ground_plane_tf_frame)
@@ -23,14 +23,14 @@ DECLARE_CONFIG_MEMBERS(WaveriderServerConfig,
                       (control_period)
                       (integrator_step_size)
                       (publish_debug_visuals_every_n_iterations)
-                      (attractor_tuning)
-                      (yaw_tuning)
-                      (repulsor_tuning));
+                      (goal_policy)
+                      (yaw_policy)
+                      (obstacle_policy));
 
 bool WaveriderServerConfig::isValid(bool verbose) const {
   bool all_valid = true;
 
-  all_valid &= IS_PARAM_NE(world_frame, "", verbose);
+  all_valid &= IS_PARAM_NE(odom_frame, "", verbose);
   all_valid &= IS_PARAM_NE(robot_state_topic, "", verbose);
   all_valid &= IS_PARAM_NE(goal_tf_frame, "", verbose);
   all_valid &= IS_PARAM_NE(ground_plane_tf_frame, "", verbose);
@@ -40,30 +40,36 @@ bool WaveriderServerConfig::isValid(bool verbose) const {
   return all_valid;
 }
 
-WaveriderServer::WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private)
+WaveriderServer::WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private,
+                                 std::string map_frame)
     : WaveriderServer(nh, nh_private,
                       WaveriderServerConfig::from(
                           wavemap::param::convert::toParamValue(nh_private, ""))
-                          .value()) {}
+                          .value(),
+                      std::move(map_frame)) {}
 
 WaveriderServer::WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private,
-                                 const WaveriderServerConfig& config)
-    : config_(config.checkValid()) {
-  // Configure the policies
-  goal_attractor_policy_.setTuning(config_.attractor_tuning.alpha,
-                                   config_.attractor_tuning.beta,
-                                   config_.attractor_tuning.c);
-  goal_attractor_policy_.setA(config_.attractor_tuning.a *
-                              Eigen::Matrix3d::Identity());
+                                 const WaveriderServerConfig& config,
+                                 std::string map_frame)
+    : config_(config.checkValid()), map_frame_(std::move(map_frame)) {
+  // Check that the map frame name is valid
+  CHECK_NE(map_frame, "");
+
+  // Configure goal policy
+  goal_policy_.setTuning(config_.goal_policy.alpha, config_.goal_policy.beta,
+                         config_.goal_policy.c);
+  goal_policy_.setA(config_.goal_policy.a * Eigen::Matrix3d::Identity());
+  // Configure yaw policy
   {
     YawPolicy::Matrix A_yaw = YawPolicy::Matrix::Zero();
-    A_yaw(2, 2) = config_.yaw_tuning.a;
+    A_yaw(2, 2) = config_.yaw_policy.a;
     yaw_policy_.setA(A_yaw);
   }
-  yaw_policy_.setTuning(config_.yaw_tuning.alpha, config_.yaw_tuning.beta,
-                        config_.yaw_tuning.c);
-  waverider_policy_.setOccupancyThreshold(config_.occupancy_threshold);
-  waverider_policy_.updateTuning(config_.repulsor_tuning);
+  yaw_policy_.setTuning(config_.yaw_policy.alpha, config_.yaw_policy.beta,
+                        config_.yaw_policy.c);
+  // Configure obstacle policy
+  obstacle_policy_.setOccupancyThreshold(config_.occupancy_threshold);
+  obstacle_policy_.updateTuning(config_.obstacle_policy);
 
   // Interface with ROS
   subscribeToTopics(nh);
@@ -95,8 +101,8 @@ void WaveriderServer::updateMap(const wavemap::MapBase& map) {
   // Extract the obstacles
   if (auto hashed_map = dynamic_cast<const wavemap::HashedWaveletOctree*>(&map);
       hashed_map) {
-    waverider_policy_.updateObstacles(*hashed_map, robot_position,
-                                      *ground_plane);
+    obstacle_policy_.updateObstacles(*hashed_map, robot_position,
+                                     *ground_plane);
   } else {
     ROS_WARN(
         "Waverider policies can currently only be extracted from maps of "
@@ -120,52 +126,50 @@ void WaveriderServer::startPlanningAsync() {
 void WaveriderServer::robotStateCallback(
     anymal_msgs::AnymalState robot_state_msg) {
   ProfilerZoneScoped;
-
-  uint64_t curr_time = robot_state_msg.header.stamp.toNSec();
-  Eigen::Matrix3d R_odom_body_ref =
+  // Get the velocities in body frame
+  const Eigen::Vector3d B_v_B(robot_state_msg.twist.twist.linear.x,
+                              robot_state_msg.twist.twist.linear.y,
+                              robot_state_msg.twist.twist.linear.z);
+  const Eigen::Vector3d B_w_B(robot_state_msg.twist.twist.angular.x,
+                              robot_state_msg.twist.twist.angular.y,
+                              robot_state_msg.twist.twist.angular.z);
+  // Get the transform from body to odom
+  const Eigen::Matrix3d O_R_B =
       Eigen::Quaterniond(robot_state_msg.pose.pose.orientation.w,
                          robot_state_msg.pose.pose.orientation.x,
                          robot_state_msg.pose.pose.orientation.y,
                          robot_state_msg.pose.pose.orientation.z)
           .toRotationMatrix();
-  Eigen::Vector3d t_odom_body_ref(robot_state_msg.pose.pose.position.x,
-                                  robot_state_msg.pose.pose.position.y,
-                                  robot_state_msg.pose.pose.position.z);
-
-  Eigen::Vector3d v(robot_state_msg.twist.twist.linear.x,
-                    robot_state_msg.twist.twist.linear.y,
-                    robot_state_msg.twist.twist.linear.z);
-  Eigen::Vector3d w(robot_state_msg.twist.twist.angular.x,
-                    robot_state_msg.twist.twist.angular.y,
-                    robot_state_msg.twist.twist.angular.z);
-
-  Eigen::Vector3d vdot;
-  Eigen::Vector3d wdot;
-
-  if (prev_time_ != 0u) {
-    double dt = static_cast<double>(curr_time - prev_time_) / 1e9;
-    vdot = (v - prev_v_) / dt;
-    wdot = (w - prev_w_) / dt;
-  } else {
-    vdot.setZero();
-    wdot.setZero();
+  const Eigen::Vector3d O_t_B(robot_state_msg.pose.pose.position.x,
+                              robot_state_msg.pose.pose.position.y,
+                              robot_state_msg.pose.pose.position.z);
+  // Get the transform from odom to map
+  wavemap::Transformation3D M_T_O;
+  const auto& timestamp = robot_state_msg.header.stamp;
+  if (!transformer_.lookupTransform(map_frame_, config_.odom_frame, timestamp,
+                                    M_T_O)) {
+    LOG(WARNING) << "Could not look up transform from odom to map. "
+                    "Ignoring robot pose update.";
+    return;
   }
+  const Eigen::Matrix3d M_R_O = M_T_O.getRotationMatrix().cast<double>();
+  const Eigen::Vector3d M_t_O = M_T_O.getPosition().cast<double>();
+  // Compute the transform from body to map
+  const Eigen::Matrix3d M_R_B = M_R_O * O_R_B;
+  const Eigen::Vector3d M_t_B = M_t_O + M_R_O * O_t_B;
 
-  // Convert into world state
+  // Convert robot pose into map frame
   {
     std::scoped_lock lock(robot_state_.mutex);
     robot_state_.data.emplace();
-    robot_state_.data->p() = t_odom_body_ref;
-    robot_state_.data->q() = R_odom_body_ref;
-    robot_state_.data->v() = R_odom_body_ref * v;
-    robot_state_.data->w() = R_odom_body_ref * w;
-    robot_state_.data->a().setZero();   // = R_odom_body_ref * vdot;
-    robot_state_.data->dw().setZero();  // = R_odom_body_ref * wdot;
+    robot_state_.data->p() = M_t_B;
+    robot_state_.data->q() = M_R_B;
+    robot_state_.data->v() = M_R_B * B_v_B;
+    robot_state_.data->w() = M_R_B * B_w_B;
+    robot_state_.data->a().setZero();
+    robot_state_.data->dw().setZero();
+    robot_state_.time = timestamp.toNSec();
   }
-
-  prev_time_ = curr_time;
-  prev_v_ = v;
-  prev_w_ = w;
 }
 
 void WaveriderServer::asyncPlanningLoop() {
@@ -181,13 +185,14 @@ void WaveriderServer::asyncPlanningLoop() {
 
 void WaveriderServer::evaluateAndPublishPolicy() {
   ProfilerZoneScoped;
-  if (!waverider_policy_.isReady()) {
+  if (!obstacle_policy_.isReady()) {
     ROS_WARN("Policy not yet initialized.");
     return;
   }
 
   // Get the current robot state
   rmpcpp::SE3State current_state;
+  uint64_t current_time;
   {
     std::unique_lock lock(robot_state_.mutex);
     if (!robot_state_.data.has_value()) {
@@ -195,6 +200,7 @@ void WaveriderServer::evaluateAndPublishPolicy() {
       return;
     }
     current_state = robot_state_.data.value();
+    current_time = robot_state_.time;
   }
 
   // Get the goal position
@@ -204,7 +210,7 @@ void WaveriderServer::evaluateAndPublishPolicy() {
       ROS_INFO("Goal position not set. Will do nothing.");
       return;
     }
-    goal_attractor_policy_.setTarget(goal->cast<double>());
+    goal_policy_.setTarget(goal->cast<double>());
   }
 
   // Forward integrate the state and policy to obtain velocity reference
@@ -223,8 +229,7 @@ void WaveriderServer::evaluateAndPublishPolicy() {
     propagated_state_r3.acc_.z() = current_state.a().z();
 
     // Evaluate the goal attraction policy
-    auto attractor_r3_value =
-        goal_attractor_policy_.evaluateAt(propagated_state_r3);
+    auto attractor_r3_value = goal_policy_.evaluateAt(propagated_state_r3);
     auto attractor_se2_value =
         R3toSE2{}.at(propagated_state_r3).pull(attractor_r3_value);
 
@@ -232,7 +237,7 @@ void WaveriderServer::evaluateAndPublishPolicy() {
     auto yaw_se2_value = yaw_policy_.evaluateAt(propagated_state);
 
     // Evaluate the static obstacle avoidance policy
-    auto waverider_r3_value = waverider_policy_.evaluateAt(propagated_state_r3);
+    auto waverider_r3_value = obstacle_policy_.evaluateAt(propagated_state_r3);
     auto waverider_se2_value =
         R3toSE2{}.at(propagated_state_r3).pull(waverider_r3_value);
 
@@ -249,38 +254,37 @@ void WaveriderServer::evaluateAndPublishPolicy() {
       static int i = 0;
       if (++i % config_.publish_debug_visuals_every_n_iterations == 0) {
         visualization_msgs::MarkerArray marker_array;
-        addFilteredObstaclesToMarkerArray(waverider_policy_.getObstacleCells(),
-                                          config_.world_frame, marker_array);
+        addFilteredObstaclesToMarkerArray(obstacle_policy_.getObstacleCells(),
+                                          map_frame_, marker_array);
         marker_array.markers.emplace_back(goalPositionToMarker(
-            goal_attractor_policy_.target().cast<FloatingPoint>(),
-            config_.world_frame));
-        marker_array.markers.emplace_back(robotPositionToMarker(
-            current_state.p().cast<float>(), config_.world_frame));
+            goal_policy_.target().cast<FloatingPoint>(), map_frame_));
+        marker_array.markers.emplace_back(
+            robotPositionToMarker(current_state.p().cast<float>(), map_frame_));
         {
           const Vector3D v_r2{static_cast<float>(propagated_state.vel_.x()),
                               static_cast<float>(propagated_state.vel_.y()),
                               0.f};
           marker_array.markers.emplace_back(
-              commandToMarker(current_state.p().cast<float>(), v_r2,
-                              config_.world_frame, "v_r2", 0.f, 0.f, 1.f));
+              commandToMarker(current_state.p().cast<float>(), v_r2, map_frame_,
+                              "v_r2", 0.f, 0.f, 1.f));
           const Vector3D v_yaw{0.f, 0.f,
                                static_cast<float>(propagated_state.vel_[2])};
           marker_array.markers.emplace_back(
               commandToMarker(current_state.p().cast<float>(), v_yaw,
-                              config_.world_frame, "v_yaw", 0.f, 0.f, 1.f));
+                              map_frame_, "v_yaw", 0.f, 0.f, 1.f));
         }
         {
           const Vector3D f_attract_r2 = {
               static_cast<float>(attractor_se2_value.f_.x()),
               static_cast<float>(attractor_se2_value.f_.y()), 0.f};
-          marker_array.markers.emplace_back(commandToMarker(
-              current_state.p().cast<float>(), f_attract_r2,
-              config_.world_frame, "f_attract_r2", 0.f, 1.f, 0.f));
+          marker_array.markers.emplace_back(
+              commandToMarker(current_state.p().cast<float>(), f_attract_r2,
+                              map_frame_, "f_attract_r2", 0.f, 1.f, 0.f));
           const Vector3D f_attract_yaw = {
               0.f, 0.f, static_cast<float>(attractor_se2_value.f_.z())};
-          marker_array.markers.emplace_back(commandToMarker(
-              current_state.p().cast<float>(), f_attract_yaw,
-              config_.world_frame, "f_attract_yaw", 0.f, 1.f, 0.f));
+          marker_array.markers.emplace_back(
+              commandToMarker(current_state.p().cast<float>(), f_attract_yaw,
+                              map_frame_, "f_attract_yaw", 0.f, 1.f, 0.f));
         }
         {
           const Vector3D f_yaw_r2 = {static_cast<float>(yaw_se2_value.f_.x()),
@@ -288,12 +292,12 @@ void WaveriderServer::evaluateAndPublishPolicy() {
                                      0.f};
           marker_array.markers.emplace_back(
               commandToMarker(current_state.p().cast<float>(), f_yaw_r2,
-                              config_.world_frame, "f_yaw_r2", 1.f, 1.f, 0.f));
+                              map_frame_, "f_yaw_r2", 1.f, 1.f, 0.f));
           const Vector3D f_yaw_yaw = {0.f, 0.f,
                                       static_cast<float>(yaw_se2_value.f_.z())};
           marker_array.markers.emplace_back(
               commandToMarker(current_state.p().cast<float>(), f_yaw_yaw,
-                              config_.world_frame, "f_yaw_yaw", 1.f, 1.f, 0.f));
+                              map_frame_, "f_yaw_yaw", 1.f, 1.f, 0.f));
         }
         {
           const Vector3D f_rep_r2 = {
@@ -301,12 +305,12 @@ void WaveriderServer::evaluateAndPublishPolicy() {
               static_cast<float>(waverider_se2_value.f_.y()), 0.f};
           marker_array.markers.emplace_back(
               commandToMarker(current_state.p().cast<float>(), f_rep_r2,
-                              config_.world_frame, "f_rep_r2", 1.f, 0.f, 0.f));
+                              map_frame_, "f_rep_r2", 1.f, 0.f, 0.f));
           const Vector3D f_rep_yaw = {
               0.f, 0.f, static_cast<float>(waverider_se2_value.f_.z())};
           marker_array.markers.emplace_back(
               commandToMarker(current_state.p().cast<float>(), f_rep_yaw,
-                              config_.world_frame, "f_rep_yaw", 1.f, 0.f, 0.f));
+                              map_frame_, "f_rep_yaw", 1.f, 0.f, 0.f));
         }
         debug_pub_.publish(marker_array);
       }
@@ -324,7 +328,7 @@ void WaveriderServer::evaluateAndPublishPolicy() {
 
   // Send velocity reference to the locomotion controller
   geometry_msgs::TwistStamped twist_msg;
-  twist_msg.header.stamp = ros::Time().fromNSec(prev_time_);
+  twist_msg.header.stamp = ros::Time().fromNSec(current_time);
   twist_msg.header.frame_id = "base";
   twist_msg.twist.linear.x = v_body.x();
   twist_msg.twist.linear.y = v_body.y();
@@ -350,7 +354,7 @@ std::optional<Point3D> WaveriderServer::getGoalFromTf() {
   ros::Time lookup_time =
       ros::Time::now() - ros::Duration(config_.tf_lookup_delay);
   wavemap::Transformation3D T_W_G;
-  if (transformer_.lookupTransform(config_.world_frame, config_.goal_tf_frame,
+  if (transformer_.lookupTransform(map_frame_, config_.goal_tf_frame,
                                    lookup_time, T_W_G)) {
     return T_W_G.getPosition();
   }
@@ -361,9 +365,8 @@ std::optional<Plane3D> WaveriderServer::getGroundPlaneFromTf() {
   ros::Time lookup_time =
       ros::Time::now() - ros::Duration(config_.tf_lookup_delay);
   wavemap::Transformation3D T_W_G;
-  if (transformer_.lookupTransform(config_.world_frame,
-                                   config_.ground_plane_tf_frame, lookup_time,
-                                   T_W_G)) {
+  if (transformer_.lookupTransform(map_frame_, config_.ground_plane_tf_frame,
+                                   lookup_time, T_W_G)) {
     Plane3D ground_plane;
     ground_plane.normal = T_W_G.getRotation().rotate(Vector3D::UnitZ());
     ground_plane.offset = ground_plane.normal.dot(T_W_G.getPosition()) +

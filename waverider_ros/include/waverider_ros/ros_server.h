@@ -13,7 +13,8 @@
 #include <wavemap/core/config/value_with_unit.h>
 #include <wavemap/core/map/map_base.h>
 #include <wavemap_ros/utils/tf_transformer.h>
-#include <waverider/attractor_policy_tuning.h>
+#include <waverider/goal_policy.h>
+#include <waverider/goal_policy_tuning.h>
 #include <waverider/waverider_policy.h>
 #include <waverider/yaw_policy.h>
 #include <waverider/yaw_policy_tuning.h>
@@ -24,16 +25,16 @@ using wavemap::SiUnit;
 using wavemap::ValueWithUnit;
 
 struct WaveriderServerConfig
-    : wavemap::ConfigBase<WaveriderServerConfig, 13, AttractorPolicyTuning,
-                          YawPolicyTuning, RepulsorPolicyTuning> {
-  std::string world_frame = "odom";
+    : wavemap::ConfigBase<WaveriderServerConfig, 13, GoalPolicyTuning,
+                          YawPolicyTuning, ObstaclePolicyTuning> {
+  std::string odom_frame = "odom";
 
   std::string robot_state_topic;
 
   std::string goal_tf_frame;
   std::string ground_plane_tf_frame;
   ValueWithUnit<SiUnit::kSeconds, FloatingPoint> tf_lookup_delay = 0.05f;
-  FloatingPoint ground_plane_offset = 0.f;
+  ValueWithUnit<SiUnit::kMeters, FloatingPoint> ground_plane_offset = 0.f;
 
   FloatingPoint occupancy_threshold = 0.1f;
 
@@ -42,9 +43,9 @@ struct WaveriderServerConfig
 
   int publish_debug_visuals_every_n_iterations = 20;
 
-  AttractorPolicyTuning attractor_tuning;
-  AttractorPolicyTuning yaw_tuning;
-  RepulsorPolicyTuning repulsor_tuning;
+  GoalPolicyTuning goal_policy;
+  YawPolicyTuning yaw_policy;
+  ObstaclePolicyTuning obstacle_policy;
 
   static MemberMap memberMap;
 
@@ -53,9 +54,10 @@ struct WaveriderServerConfig
 
 class WaveriderServer {
  public:
-  WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private);
   WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private,
-                  const WaveriderServerConfig& config);
+                  std::string map_frame);
+  WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private,
+                  const WaveriderServerConfig& config, std::string map_frame);
 
   void updateMap(const wavemap::MapBase& map);
 
@@ -68,16 +70,18 @@ class WaveriderServer {
 
  private:
   const WaveriderServerConfig config_;
+  const std::string map_frame_;
 
   struct {
     std::optional<rmpcpp::SE3State> data;
+    uint64_t time = 0u;
     std::mutex mutex;
   } robot_state_;
 
   // Wavemap-based obstacle avoidance policy
-  rmpcpp::SimpleTargetPolicy<rmpcpp::Space<3>> goal_attractor_policy_;
+  GoalPolicy goal_policy_;
   YawPolicy yaw_policy_;
-  WaveriderPolicy waverider_policy_;
+  WaveriderPolicy obstacle_policy_;
 
   // Asynchronous policy publishing logic
   std::atomic<bool> continue_async_planning_{false};
@@ -89,9 +93,6 @@ class WaveriderServer {
   void subscribeToTopics(ros::NodeHandle& nh);
   ros::Subscriber robot_state_sub_;
   wavemap::TfTransformer transformer_;
-  uint64_t prev_time_ = 0u;
-  Eigen::Vector3d prev_v_ = Eigen::Vector3d::Zero();
-  Eigen::Vector3d prev_w_ = Eigen::Vector3d::Zero();
 
   void advertiseTopics(ros::NodeHandle& nh_private);
   ros::Publisher policy_pub_;

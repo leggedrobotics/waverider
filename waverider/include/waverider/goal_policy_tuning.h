@@ -1,10 +1,10 @@
-#ifndef WAVERIDER_ATTRACTOR_POLICY_TUNING_H_
-#define WAVERIDER_ATTRACTOR_POLICY_TUNING_H_
+#ifndef WAVERIDER_GOAL_POLICY_TUNING_H_
+#define WAVERIDER_GOAL_POLICY_TUNING_H_
 
 #include <wavemap/core/config/config_base.h>
 
 namespace waverider {
-struct AttractorPolicyTuning : wavemap::ConfigBase<AttractorPolicyTuning, 4> {
+struct GoalPolicyTuning : wavemap::ConfigBase<GoalPolicyTuning, 4> {
   //! Attractive gain
   float alpha = 20.f;
   //! Damping gain
@@ -20,4 +20,4 @@ struct AttractorPolicyTuning : wavemap::ConfigBase<AttractorPolicyTuning, 4> {
 };
 }  // namespace waverider
 
-#endif  // WAVERIDER_ATTRACTOR_POLICY_TUNING_H_
+#endif  // WAVERIDER_GOAL_POLICY_TUNING_H_

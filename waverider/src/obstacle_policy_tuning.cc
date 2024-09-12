@@ -1,7 +1,7 @@
-#include "waverider/repulsor_policy_tuning.h"
+#include "waverider/obstacle_policy_tuning.h"
 
 namespace waverider {
-DECLARE_CONFIG_MEMBERS(RepulsorPolicyTuning,
+DECLARE_CONFIG_MEMBERS(ObstaclePolicyTuning,
                       (r)
                       (c)
                       (eta_rep)
@@ -11,7 +11,7 @@ DECLARE_CONFIG_MEMBERS(RepulsorPolicyTuning,
                       (enable_damper)
                       (enable_repulsor));
 
-bool RepulsorPolicyTuning::isValid(bool verbose) const {
+bool ObstaclePolicyTuning::isValid(bool verbose) const {
   bool is_valid = true;
 
   is_valid &= IS_PARAM_GT(r, 0.f, verbose);

@@ -2,7 +2,7 @@
 
 namespace waverider {
 ParallelizedPolicy::ParallelizedPolicy(uint num_policies,
-                                       RepulsorPolicyTuning tuning)
+                                       ObstaclePolicyTuning tuning)
     : tuning_(std::move(tuning)), num_policies_(num_policies) {}
 
 void ParallelizedPolicy::init(const std::vector<Eigen::Vector3f>& x_obs,

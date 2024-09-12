@@ -27,7 +27,7 @@ class WaveriderPolicy : public rmpcpp::PolicyBase<rmpcpp::Space<3>> {
   void updateObstacles(const wavemap::HashedWaveletOctree& map,
                        const Point3D& robot_position,
                        const Plane3D& ground_plane);
-  void updateTuning(RepulsorPolicyTuning tuning) {
+  void updateTuning(ObstaclePolicyTuning tuning) {
     policy_tuning_ = std::move(tuning);
   }
 
@@ -38,7 +38,7 @@ class WaveriderPolicy : public rmpcpp::PolicyBase<rmpcpp::Space<3>> {
  public:
   WavemapObstacleFilter obstacle_filter_;
   bool run_all_levels_ = true;
-  RepulsorPolicyTuning policy_tuning_;
+  ObstaclePolicyTuning policy_tuning_;
 };
 }  // namespace waverider
 

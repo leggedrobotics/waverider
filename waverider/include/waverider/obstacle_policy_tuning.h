@@ -1,10 +1,10 @@
-#ifndef WAVERIDER_REPULSOR_POLICY_TUNING_H_
-#define WAVERIDER_REPULSOR_POLICY_TUNING_H_
+#ifndef WAVERIDER_OBSTACLE_POLICY_TUNING_H_
+#define WAVERIDER_OBSTACLE_POLICY_TUNING_H_
 
 #include <wavemap/core/config/config_base.h>
 
 namespace waverider {
-struct RepulsorPolicyTuning : wavemap::ConfigBase<RepulsorPolicyTuning, 8> {
+struct ObstaclePolicyTuning : wavemap::ConfigBase<ObstaclePolicyTuning, 8> {
   //! Overall activation of the policy
   //! @warning Gets set automatically. Manual values ignored.
   float r = 1.3;
@@ -31,4 +31,4 @@ struct RepulsorPolicyTuning : wavemap::ConfigBase<RepulsorPolicyTuning, 8> {
 };
 }  // namespace waverider
 
-#endif  // WAVERIDER_REPULSOR_POLICY_TUNING_H_
+#endif  // WAVERIDER_OBSTACLE_POLICY_TUNING_H_

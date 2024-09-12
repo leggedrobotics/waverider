@@ -1,13 +1,13 @@
-#include "waverider/attractor_policy_tuning.h"
+#include "waverider/goal_policy_tuning.h"
 
 namespace waverider {
-DECLARE_CONFIG_MEMBERS(AttractorPolicyTuning,
+DECLARE_CONFIG_MEMBERS(GoalPolicyTuning,
                       (alpha)
                       (beta)
                       (c)
                       (a));
 
-bool AttractorPolicyTuning::isValid(bool verbose) const {
+bool GoalPolicyTuning::isValid(bool verbose) const {
   bool is_valid = true;
 
   is_valid &= IS_PARAM_GT(alpha, 0.f, verbose);

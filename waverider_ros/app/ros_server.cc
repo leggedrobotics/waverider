@@ -55,7 +55,8 @@ int main(int argc, char** argv) {
     nh_planner.setCallbackQueue(&planner_callback_queue);
     nh_planner_private.setCallbackQueue(&planner_callback_queue);
     waverider_server = std::make_unique<waverider::WaveriderServer>(
-        nh_planner, nh_planner_private);
+        nh_planner, nh_planner_private,
+        wavemap_server->getConfig().world_frame);
   }
 
   // Subscribe waverider to wavemap map updates

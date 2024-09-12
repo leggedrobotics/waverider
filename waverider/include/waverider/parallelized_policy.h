@@ -6,12 +6,12 @@
 #include <rmpcpp/core/policy_value.h>
 
 #include "waverider/obstacle_filter.h"
-#include "waverider/repulsor_policy_tuning.h"
+#include "waverider/obstacle_policy_tuning.h"
 
 namespace waverider {
 class ParallelizedPolicy {
  public:
-  ParallelizedPolicy(uint num_policies, RepulsorPolicyTuning tuning);
+  ParallelizedPolicy(uint num_policies, ObstaclePolicyTuning tuning);
 
   void init(const std::vector<Eigen::Vector3f>& x_obs, const Eigen::Vector3f& x,
             const Eigen::Vector3f& xdot);
@@ -46,7 +46,7 @@ class ParallelizedPolicy {
   }
 
  private:
-  RepulsorPolicyTuning tuning_;
+  ObstaclePolicyTuning tuning_;
 
   uint num_policies_;
   Eigen::Vector3f Af_sum = Eigen::Vector3f::Zero();

@@ -1,24 +1,24 @@
-world_frame: "map"
+odom_frame: "odom"
 robot_state_topic: "/state_estimator/anymal_state"
 goal_tf_frame: "waverider_goal"
 ground_plane_tf_frame: "footprint"
-tf_lookup_delay: { "seconds": 0.05 }
+tf_lookup_delay: { seconds: 0.05 }
 occupancy_threshold: 0.1
-control_period: { "seconds": 0.02 }
-integrator_step_size: { "seconds": 0.005 }
+control_period: { seconds: 0.02 }
+integrator_step_size: { seconds: 0.005 }
 publish_debug_visuals_every_n_iterations: 20
-ground_plane_offset: 0.10
-attractor_tuning:
-  alpha: 25.0 # TODO(victorr): Set alpha to zero once close to goal
+ground_plane_offset: { meters: 0.10 }
+goal_policy:
+  alpha: 25.0
   beta: 35.0
   c: 0.2
   a: 20.0
-yaw_tuning:
+yaw_policy:
   alpha: 15.0
   beta: 20.0
   c: 0.1
   a: 20.0
-repulsor_tuning:
+obstacle_policy:
   c: 0.1
   eta_rep: 30.0
   eta_damp: 340.0
