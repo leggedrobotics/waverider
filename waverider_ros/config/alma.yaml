@@ -1,6 +1,6 @@
 odom_frame: "odom"
-robot_state_topic: "/state_estimator/alma_state"
-twist_command_topic: "/base_tracker/commanded_twist"
+robot_state_topic: "/state_estimator/anymal_state"
+twist_command_topic: "/path_planning_and_following/twist"
 obstacle_aabb_topics:
   - "/depth_camera_front_upper/aligned_depth_to_infra1/bboxes"
   - "/depth_camera_rear_upper/aligned_depth_to_infra1/bboxes"
@@ -24,6 +24,7 @@ yaw_policy:
   beta: 20.0
   c: 0.1
   a: 20.0
+  angle_forward: { degrees: 180.0 }
 map_obstacles_policy:
   c: 0.1
   eta_rep: 30.0
@@ -31,5 +32,8 @@ map_obstacles_policy:
   enable_damper: true
   enable_repulsor: true
 aabb_obstacles_policy:
+  r: 160.0         # overall activation strenght
+  eta_rep: 500.0   # linear repulsion term
+  eta_damp: 300.0  # damping -> based on robot velocity to obstacle
   enable_damper: true
   enable_repulsor: true

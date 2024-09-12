@@ -4,7 +4,7 @@
 #include <wavemap/core/config/config_base.h>
 
 namespace waverider {
-struct YawPolicyTuning : wavemap::ConfigBase<YawPolicyTuning, 4> {
+struct YawPolicyTuning : wavemap::ConfigBase<YawPolicyTuning, 5> {
   //! Attractive gain
   float alpha = 20.f;
   //! Damping gain

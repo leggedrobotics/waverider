@@ -393,7 +393,7 @@ void WaveriderServer::parseAabbMsg(
     const std_msgs::Float32MultiArray& msg,
     ObstacleListPolicy::ObstacleList& aabb_list) {
   // Check that the data fits the expected layout
-  CHECK(msg.data.size() % 6);
+  CHECK_EQ(msg.data.size() % 6, 0);
   // Parse the message
   const int num_aabbs = msg.data.size() / 6;
   aabb_list.resize(num_aabbs);
@@ -420,8 +420,8 @@ std::optional<Point3D> WaveriderServer::getGoalFromTf() {
   ros::Time lookup_time =
       ros::Time::now() - ros::Duration(config_.tf_lookup_delay);
   wavemap::Transformation3D T_W_G;
-  if (transformer_.lookupTransform(map_frame_, config_.goal_tf_frame,
-                                   lookup_time, T_W_G)) {
+  if (transformer_.lookupLatestTransform(map_frame_, config_.goal_tf_frame,
+                                    T_W_G)) {
     return T_W_G.getPosition();
   }
   return std::nullopt;
@@ -431,8 +431,8 @@ std::optional<Plane3D> WaveriderServer::getGroundPlaneFromTf() {
   ros::Time lookup_time =
       ros::Time::now() - ros::Duration(config_.tf_lookup_delay);
   wavemap::Transformation3D T_W_G;
-  if (transformer_.lookupTransform(map_frame_, config_.ground_plane_tf_frame,
-                                   lookup_time, T_W_G)) {
+  if (transformer_.lookupLatestTransform(map_frame_, config_.ground_plane_tf_frame,
+                                    T_W_G)) {
     Plane3D ground_plane;
     ground_plane.normal = T_W_G.getRotation().rotate(Vector3D::UnitZ());
     ground_plane.offset = ground_plane.normal.dot(T_W_G.getPosition()) +
