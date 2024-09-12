@@ -14,28 +14,28 @@ class WaveriderPolicy : public rmpcpp::PolicyBase<rmpcpp::Space<3>> {
  public:
   WaveriderPolicy() = default;
 
+  bool isReady() const { return obstacle_filter_.isReady(); }
+
+  void setTuning(const ObstaclePolicyTuning& tuning);
   void setOccupancyThreshold(FloatingPoint value) {
     obstacle_filter_.setOccupancyThreshold(value);
   }
-  void setRunAllLevels(bool run_all_levels) {
-    run_all_levels_ = run_all_levels;
-  }
-  const ObstacleCells& getObstacleCells() {
-    return obstacle_filter_.getObstacleCells();
+  void setUseMultiResolution(bool use_multi_resolution) {
+    use_multi_resolution_ = use_multi_resolution;
   }
 
   void updateObstacles(const wavemap::HashedWaveletOctree& map,
                        const Point3D& robot_position,
                        const Plane3D& ground_plane);
-  void setTuning(ObstaclePolicyTuning tuning) { tuning_ = std::move(tuning); }
-
-  bool isReady() const { return obstacle_filter_.isReady(); }
+  const ObstacleCells& getObstacleCells() {
+    return obstacle_filter_.getObstacleCells();
+  }
 
   rmpcpp::PolicyValue<3> evaluateAt(const rmpcpp::State<3>& x) override;
 
  public:
   WavemapObstacleFilter obstacle_filter_;
-  bool run_all_levels_ = true;
+  bool use_multi_resolution_ = true;
   ObstaclePolicyTuning tuning_;
 };
 }  // namespace waverider

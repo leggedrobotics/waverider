@@ -3,6 +3,20 @@
 #include "waverider/obstacle_list_policy.h"
 
 namespace waverider {
+ObstacleListPolicy::ObstacleListPolicy(const ObstaclePolicyTuning& tuning) {
+  setTuning(tuning);
+}
+
+void ObstacleListPolicy::setTuning(const ObstaclePolicyTuning& tuning) {
+  tuning_ = tuning.checkValid();
+}
+
+void ObstacleListPolicy::addObstacles(
+    const ObstacleListPolicy::ObstacleList& obstacles) {
+  obstacle_aabbs_.insert(obstacle_aabbs_.end(), obstacles.begin(),
+                         obstacles.end());
+}
+
 rmpcpp::PolicyValue<3> ObstacleListPolicy::evaluateAt(
     const rmpcpp::State<3>& x) {
   ProfilerZoneScoped;

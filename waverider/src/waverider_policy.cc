@@ -5,6 +5,10 @@
 #include "waverider/obstacle_filter.h"
 
 namespace waverider {
+void WaveriderPolicy::setTuning(const ObstaclePolicyTuning& tuning) {
+  tuning_ = tuning.checkValid();
+}
+
 void WaveriderPolicy::updateObstacles(const wavemap::HashedWaveletOctree& map,
                                       const Point3D& robot_position,
                                       const Plane3D& ground_plane) {
@@ -24,7 +28,7 @@ rmpcpp::PolicyValue<3> WaveriderPolicy::evaluateAt(const rmpcpp::State<3>& x) {
   std::vector<rmpcpp::PolicyValue<3>> all_values;
   const auto& policy_cells = obstacle_filter_.getObstacleCells();
   for (int i = 0; i < static_cast<int>(policy_cells.cell_widths.size()); i++) {
-    if (i == 0 || run_all_levels_) {
+    if (i == 0 || use_multi_resolution_) {
       ParallelizedPolicy level_policy(tuning_);
       level_policy.setR(1.5f * WavemapObstacleFilter::maxRangeForHeight(i));
 

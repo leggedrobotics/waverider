@@ -13,6 +13,8 @@ struct YawPolicyTuning : wavemap::ConfigBase<YawPolicyTuning, 4> {
   float c = 0.2;
   //! Metric scaling (applied as A(i,j) = O except A(2,2) = a)
   float a = 10.f;
+  //! Angle that is considered as 'facing forward'
+  wavemap::ValueWithUnit<wavemap::SiUnit::kRadians, float> angle_forward = 0.f;
 
   static MemberMap memberMap;
 

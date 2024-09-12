@@ -15,15 +15,13 @@ class ObstacleListPolicy : public rmpcpp::PolicyBase<rmpcpp::Space<3>> {
  public:
   using ObstacleList = std::vector<wavemap::AABB<Point3D>>;
 
+  explicit ObstacleListPolicy(const ObstaclePolicyTuning& tuning);
   ObstacleListPolicy() = default;
 
-  void addObstacles(const ObstacleList& obstacles) {
-    obstacle_aabbs_.insert(obstacle_aabbs_.end(), obstacles.begin(),
-                           obstacles.end());
-  }
-  void clearObstacles() { obstacle_aabbs_.clear(); }
+  void setTuning(const ObstaclePolicyTuning& tuning);
 
-  void setTuning(ObstaclePolicyTuning tuning) { tuning_ = std::move(tuning); }
+  void addObstacles(const ObstacleList& obstacles);
+  void clearObstacles() { obstacle_aabbs_.clear(); }
 
   rmpcpp::PolicyValue<3> evaluateAt(const rmpcpp::State<3>& x) override;
 
