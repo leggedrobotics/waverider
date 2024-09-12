@@ -53,7 +53,7 @@ WaveriderServer::WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private,
                                  std::string map_frame)
     : config_(config.checkValid()), map_frame_(std::move(map_frame)) {
   // Check that the map frame name is valid
-  CHECK_NE(map_frame, "");
+  CHECK_NE(map_frame_, "");
 
   // Configure goal policy
   goal_policy_.setTuning(config_.goal_policy.alpha, config_.goal_policy.beta,
@@ -146,9 +146,8 @@ void WaveriderServer::robotStateCallback(
                               robot_state_msg.pose.pose.position.z);
   // Get the transform from odom to map
   wavemap::Transformation3D M_T_O;
-  const auto& timestamp = robot_state_msg.header.stamp;
-  if (!transformer_.lookupTransform(map_frame_, config_.odom_frame, timestamp,
-                                    M_T_O)) {
+  if (!transformer_.lookupLatestTransform(map_frame_, config_.odom_frame,
+                                          M_T_O)) {
     LOG(WARNING) << "Could not look up transform from odom to map. "
                     "Ignoring robot pose update.";
     return;
@@ -169,7 +168,7 @@ void WaveriderServer::robotStateCallback(
     robot_state_.data->w() = M_R_B * B_w_B;
     robot_state_.data->a().setZero();
     robot_state_.data->dw().setZero();
-    robot_state_.time = timestamp.toNSec();
+    robot_state_.time = robot_state_msg.header.stamp.toNSec();
   }
 }
 
