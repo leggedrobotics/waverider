@@ -1,5 +1,6 @@
 odom_frame: "odom"
-robot_state_topic: "/state_estimator/anymal_state"
+robot_state_topic: "/state_estimator/alma_state"
+twist_command_topic: "/base_tracker/commanded_twist"
 goal_tf_frame: "waverider_goal"
 ground_plane_tf_frame: "footprint"
 tf_lookup_delay: { seconds: 0.05 }

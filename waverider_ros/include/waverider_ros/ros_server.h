@@ -25,11 +25,12 @@ using wavemap::SiUnit;
 using wavemap::ValueWithUnit;
 
 struct WaveriderServerConfig
-    : wavemap::ConfigBase<WaveriderServerConfig, 13, GoalPolicyTuning,
+    : wavemap::ConfigBase<WaveriderServerConfig, 14, GoalPolicyTuning,
                           YawPolicyTuning, ObstaclePolicyTuning> {
   std::string odom_frame = "odom";
 
   std::string robot_state_topic;
+  std::string twist_command_topic;
 
   std::string goal_tf_frame;
   std::string ground_plane_tf_frame;

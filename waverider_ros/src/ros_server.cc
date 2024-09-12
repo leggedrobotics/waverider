@@ -15,6 +15,7 @@ namespace waverider {
 DECLARE_CONFIG_MEMBERS(WaveriderServerConfig,
                       (odom_frame)
                       (robot_state_topic)
+                      (twist_command_topic)
                       (goal_tf_frame)
                       (ground_plane_tf_frame)
                       (tf_lookup_delay)
@@ -32,6 +33,7 @@ bool WaveriderServerConfig::isValid(bool verbose) const {
 
   all_valid &= IS_PARAM_NE(odom_frame, "", verbose);
   all_valid &= IS_PARAM_NE(robot_state_topic, "", verbose);
+  all_valid &= IS_PARAM_NE(twist_command_topic, "", verbose);
   all_valid &= IS_PARAM_NE(goal_tf_frame, "", verbose);
   all_valid &= IS_PARAM_NE(ground_plane_tf_frame, "", verbose);
   all_valid &= IS_PARAM_GE(tf_lookup_delay, 0.f, verbose);
@@ -344,10 +346,10 @@ void WaveriderServer::subscribeToTopics(ros::NodeHandle& nh) {
 
 void WaveriderServer::advertiseTopics(ros::NodeHandle& nh_private) {
   policy_pub_ = nh_private.advertise<geometry_msgs::TwistStamped>(
-      "/path_planning_and_following/twist", 1);
+      config_.twist_command_topic, 1);
   // Advertise debug visuals
   debug_pub_ = nh_private.advertise<visualization_msgs::MarkerArray>(
-      "filtered_obstacles", 1);
+      "policy_visuals", 1);
 }
 
 std::optional<Point3D> WaveriderServer::getGoalFromTf() {
