@@ -16,7 +16,8 @@ class GoalPolicy : public rmpcpp::PolicyBase<rmpcpp::Space<3>> {
   explicit GoalPolicy(Vector target);
   GoalPolicy();
 
-  void setTuning(double alpha, double beta, double gamma);
+  void setTuning(double alpha, double beta, double gamma,
+                 bool disable_attractor_near_goal);
 
   void setTarget(const Vector& target) { target_ = target; }
 
@@ -39,6 +40,7 @@ class GoalPolicy : public rmpcpp::PolicyBase<rmpcpp::Space<3>> {
 
   double alpha_{1.0}, beta_{8.0}, c_{0.005};
   Vector target_;
+  bool disable_attractor_near_goal_ = true;
 };
 }  // namespace waverider
 

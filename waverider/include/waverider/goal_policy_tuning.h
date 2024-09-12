@@ -4,7 +4,7 @@
 #include <wavemap/core/config/config_base.h>
 
 namespace waverider {
-struct GoalPolicyTuning : wavemap::ConfigBase<GoalPolicyTuning, 4> {
+struct GoalPolicyTuning : wavemap::ConfigBase<GoalPolicyTuning, 5> {
   //! Attractive gain
   float alpha = 20.f;
   //! Damping gain
@@ -13,6 +13,8 @@ struct GoalPolicyTuning : wavemap::ConfigBase<GoalPolicyTuning, 4> {
   float c = 0.2;
   //! Metric scaling (applied as A = a * Identity)
   float a = 10.f;
+  //! Disable attractor near boal
+  bool disable_attractor_near_goal = true;
 
   static MemberMap memberMap;
 

@@ -5,7 +5,8 @@ DECLARE_CONFIG_MEMBERS(GoalPolicyTuning,
                       (alpha)
                       (beta)
                       (c)
-                      (a));
+                      (a)
+                      (disable_attractor_near_goal));
 
 bool GoalPolicyTuning::isValid(bool verbose) const {
   bool is_valid = true;

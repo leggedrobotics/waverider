@@ -57,7 +57,8 @@ WaveriderServer::WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private,
 
   // Configure goal policy
   goal_policy_.setTuning(config_.goal_policy.alpha, config_.goal_policy.beta,
-                         config_.goal_policy.c);
+                         config_.goal_policy.c,
+                         config_.goal_policy.disable_attractor_near_goal);
   goal_policy_.setA(config_.goal_policy.a * Eigen::Matrix3d::Identity());
   // Configure yaw policy
   {
