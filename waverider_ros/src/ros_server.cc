@@ -16,6 +16,7 @@ DECLARE_CONFIG_MEMBERS(WaveriderServerConfig,
                       (odom_frame)
                       (robot_state_topic)
                       (twist_command_topic)
+                      (obstacle_aabb_topics)
                       (goal_tf_frame)
                       (ground_plane_tf_frame)
                       (tf_lookup_delay)
@@ -26,7 +27,8 @@ DECLARE_CONFIG_MEMBERS(WaveriderServerConfig,
                       (publish_debug_visuals_every_n_iterations)
                       (goal_policy)
                       (yaw_policy)
-                      (obstacle_policy));
+                      (map_obstacles_policy)
+                      (aabb_obstacles_policy));
 
 bool WaveriderServerConfig::isValid(bool verbose) const {
   bool all_valid = true;
@@ -38,6 +40,10 @@ bool WaveriderServerConfig::isValid(bool verbose) const {
   all_valid &= IS_PARAM_NE(ground_plane_tf_frame, "", verbose);
   all_valid &= IS_PARAM_GE(tf_lookup_delay, 0.f, verbose);
   all_valid &= IS_PARAM_GT(control_period, 0.f, verbose);
+  all_valid &= IS_PARAM_TRUE(goal_policy.isValid(verbose), verbose);
+  all_valid &= IS_PARAM_TRUE(yaw_policy.isValid(verbose), verbose);
+  all_valid &= IS_PARAM_TRUE(map_obstacles_policy.isValid(verbose), verbose);
+  all_valid &= IS_PARAM_TRUE(aabb_obstacles_policy.isValid(verbose), verbose);
 
   return all_valid;
 }
@@ -70,9 +76,11 @@ WaveriderServer::WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private,
   }
   yaw_policy_.setTuning(config_.yaw_policy.alpha, config_.yaw_policy.beta,
                         config_.yaw_policy.c);
-  // Configure obstacle policy
-  obstacle_policy_.setOccupancyThreshold(config_.occupancy_threshold);
-  obstacle_policy_.updateTuning(config_.obstacle_policy);
+  // Configure map obstacle avoidance policy
+  map_obstacles_policy_.setOccupancyThreshold(config_.occupancy_threshold);
+  map_obstacles_policy_.setTuning(config_.map_obstacles_policy);
+  // Configure AABB list obstacle avoidance policy
+  aabb_obstacles_policy_.setTuning(config_.aabb_obstacles_policy);
 
   // Interface with ROS
   subscribeToTopics(nh);
@@ -104,8 +112,8 @@ void WaveriderServer::updateMap(const wavemap::MapBase& map) {
   // Extract the obstacles
   if (auto hashed_map = dynamic_cast<const wavemap::HashedWaveletOctree*>(&map);
       hashed_map) {
-    obstacle_policy_.updateObstacles(*hashed_map, robot_position,
-                                     *ground_plane);
+    map_obstacles_policy_.updateObstacles(*hashed_map, robot_position,
+                                          *ground_plane);
   } else {
     ROS_WARN(
         "Waverider policies can currently only be extracted from maps of "
@@ -187,9 +195,19 @@ void WaveriderServer::asyncPlanningLoop() {
 
 void WaveriderServer::evaluateAndPublishPolicy() {
   ProfilerZoneScoped;
-  if (!obstacle_policy_.isReady()) {
+  // Check that the map obstacle avoidance policy is ready
+  if (!map_obstacles_policy_.isReady()) {
     ROS_WARN("Policy not yet initialized.");
     return;
+  }
+
+  // Update the AABBs for the obstacle list avoidance policy
+  aabb_obstacles_policy_.clearObstacles();
+  {
+    std::unique_lock lock(aabb_lists_.mutex);
+    for (const auto& aabb_list : aabb_lists_.data) {
+      aabb_obstacles_policy_.addObstacles(aabb_list);
+    }
   }
 
   // Get the current robot state
@@ -239,16 +257,21 @@ void WaveriderServer::evaluateAndPublishPolicy() {
     auto yaw_se2_value = yaw_policy_.evaluateAt(propagated_state);
 
     // Evaluate the static obstacle avoidance policy
-    auto waverider_r3_value = obstacle_policy_.evaluateAt(propagated_state_r3);
-    auto waverider_se2_value =
-        R3toSE2{}.at(propagated_state_r3).pull(waverider_r3_value);
+    auto map_obstacles_r3_value =
+        map_obstacles_policy_.evaluateAt(propagated_state_r3);
+    auto map_obstacles_se2_value =
+        R3toSE2{}.at(propagated_state_r3).pull(map_obstacles_r3_value);
 
     // Evaluate the dynamic obstacle avoidance policy
-    // TODO(victorr): Add a policy that avoids all dynamic obstacle AABBs
+    auto aabb_obstacles_r3_value =
+        aabb_obstacles_policy_.evaluateAt(propagated_state_r3);
+    auto aabb_obstacles_se2_value =
+        R3toSE2{}.at(propagated_state_r3).pull(aabb_obstacles_r3_value);
 
     // Apply the policies by integrating their commanded accelerations
-    auto f_total =
-        (attractor_se2_value + yaw_se2_value + waverider_se2_value).f_;
+    const auto value_total = attractor_se2_value + yaw_se2_value +
+                             map_obstacles_se2_value + aabb_obstacles_se2_value;
+    const auto f_total = value_total.f_;
     integrator.step(f_total);
 
     // Publish debug visuals
@@ -256,8 +279,8 @@ void WaveriderServer::evaluateAndPublishPolicy() {
       static int i = 0;
       if (++i % config_.publish_debug_visuals_every_n_iterations == 0) {
         visualization_msgs::MarkerArray marker_array;
-        addFilteredObstaclesToMarkerArray(obstacle_policy_.getObstacleCells(),
-                                          map_frame_, marker_array);
+        addFilteredObstaclesToMarkerArray(
+            map_obstacles_policy_.getObstacleCells(), map_frame_, marker_array);
         marker_array.markers.emplace_back(goalPositionToMarker(
             goal_policy_.target().cast<FloatingPoint>(), map_frame_));
         marker_array.markers.emplace_back(
@@ -276,17 +299,17 @@ void WaveriderServer::evaluateAndPublishPolicy() {
                               map_frame_, "v_yaw", 0.f, 0.f, 1.f));
         }
         {
-          const Vector3D f_attract_r2 = {
+          const Vector3D f_goal_r2 = {
               static_cast<float>(attractor_se2_value.f_.x()),
               static_cast<float>(attractor_se2_value.f_.y()), 0.f};
           marker_array.markers.emplace_back(
-              commandToMarker(current_state.p().cast<float>(), f_attract_r2,
-                              map_frame_, "f_attract_r2", 0.f, 1.f, 0.f));
-          const Vector3D f_attract_yaw = {
+              commandToMarker(current_state.p().cast<float>(), f_goal_r2,
+                              map_frame_, "f_goal_r2", 0.f, 1.f, 0.f));
+          const Vector3D f_goal_yaw = {
               0.f, 0.f, static_cast<float>(attractor_se2_value.f_.z())};
           marker_array.markers.emplace_back(
-              commandToMarker(current_state.p().cast<float>(), f_attract_yaw,
-                              map_frame_, "f_attract_yaw", 0.f, 1.f, 0.f));
+              commandToMarker(current_state.p().cast<float>(), f_goal_yaw,
+                              map_frame_, "f_goal_yaw", 0.f, 1.f, 0.f));
         }
         {
           const Vector3D f_yaw_r2 = {static_cast<float>(yaw_se2_value.f_.x()),
@@ -302,17 +325,30 @@ void WaveriderServer::evaluateAndPublishPolicy() {
                               map_frame_, "f_yaw_yaw", 1.f, 1.f, 0.f));
         }
         {
-          const Vector3D f_rep_r2 = {
-              static_cast<float>(waverider_se2_value.f_.x()),
-              static_cast<float>(waverider_se2_value.f_.y()), 0.f};
-          marker_array.markers.emplace_back(
-              commandToMarker(current_state.p().cast<float>(), f_rep_r2,
-                              map_frame_, "f_rep_r2", 1.f, 0.f, 0.f));
-          const Vector3D f_rep_yaw = {
-              0.f, 0.f, static_cast<float>(waverider_se2_value.f_.z())};
-          marker_array.markers.emplace_back(
-              commandToMarker(current_state.p().cast<float>(), f_rep_yaw,
-                              map_frame_, "f_rep_yaw", 1.f, 0.f, 0.f));
+          const Vector3D f_map_obstacles_r2 = {
+              static_cast<float>(map_obstacles_se2_value.f_.x()),
+              static_cast<float>(map_obstacles_se2_value.f_.y()), 0.f};
+          marker_array.markers.emplace_back(commandToMarker(
+              current_state.p().cast<float>(), f_map_obstacles_r2, map_frame_,
+              "f_map_obstacles_r2", 1.f, 0.f, 0.f));
+          const Vector3D f_map_obstacles_yaw = {
+              0.f, 0.f, static_cast<float>(map_obstacles_se2_value.f_.z())};
+          marker_array.markers.emplace_back(commandToMarker(
+              current_state.p().cast<float>(), f_map_obstacles_yaw, map_frame_,
+              "f_map_obstacles_yaw", 1.f, 0.f, 0.f));
+        }
+        {
+          const Vector3D f_aabb_obstacles_r2 = {
+              static_cast<float>(aabb_obstacles_se2_value.f_.x()),
+              static_cast<float>(aabb_obstacles_se2_value.f_.y()), 0.f};
+          marker_array.markers.emplace_back(commandToMarker(
+              current_state.p().cast<float>(), f_aabb_obstacles_r2, map_frame_,
+              "f_aabb_obstacles_r2", 1.f, 0.f, 0.f));
+          const Vector3D f_aabb_obstacles_yaw = {
+              0.f, 0.f, static_cast<float>(aabb_obstacles_se2_value.f_.z())};
+          marker_array.markers.emplace_back(commandToMarker(
+              current_state.p().cast<float>(), f_aabb_obstacles_yaw, map_frame_,
+              "f_aabb_obstacles_yaw", 1.f, 0.f, 0.f));
         }
         debug_pub_.publish(marker_array);
       }
@@ -342,6 +378,43 @@ void WaveriderServer::evaluateAndPublishPolicy() {
 void WaveriderServer::subscribeToTopics(ros::NodeHandle& nh) {
   robot_state_sub_ = nh.subscribe(config_.robot_state_topic, 1,
                                   &WaveriderServer::robotStateCallback, this);
+
+  {
+    std::scoped_lock lock(aabb_lists_.mutex);
+    aabb_lists_.data.resize(config_.obstacle_aabb_topics.value.size());
+  }
+  {
+    int index = 0;
+    for (const auto& topic : config_.obstacle_aabb_topics.value) {
+      aabb_subs_.emplace_back() = nh.subscribe<std_msgs::Float32MultiArray>(
+          topic, 1,
+          [this, index](const std_msgs::Float32MultiArray::ConstPtr& msg) {
+            std::scoped_lock lock(aabb_lists_.mutex);
+            auto& aabb_list = aabb_lists_.data[index];
+            parseAabbMsg(*msg, aabb_list);
+          });
+      ++index;
+    }
+  }
+}
+
+void WaveriderServer::parseAabbMsg(
+    const std_msgs::Float32MultiArray& msg,
+    ObstacleListPolicy::ObstacleList& aabb_list) {
+  // Check that the data fits the expected layout
+  CHECK(msg.data.size() % 6);
+  // Parse the message
+  const int num_aabbs = msg.data.size() / 6;
+  aabb_list.resize(num_aabbs);
+  for (int aabb_idx = 0; aabb_idx < num_aabbs; ++aabb_idx) {
+    const int first_coord_idx = aabb_idx * 6;
+    aabb_list[aabb_idx].min = {msg.data[first_coord_idx + 0],
+                               msg.data[first_coord_idx + 1],
+                               msg.data[first_coord_idx + 2]};
+    aabb_list[aabb_idx].max = {msg.data[first_coord_idx + 3],
+                               msg.data[first_coord_idx + 4],
+                               msg.data[first_coord_idx + 5]};
+  }
 }
 
 void WaveriderServer::advertiseTopics(ros::NodeHandle& nh_private) {

@@ -11,12 +11,11 @@
 namespace waverider {
 class ParallelizedPolicy {
  public:
-  ParallelizedPolicy(uint num_policies, ObstaclePolicyTuning tuning);
+  explicit ParallelizedPolicy(ObstaclePolicyTuning tuning);
 
-  void evaluate(const std::vector<Eigen::Vector3f>& x_obs,
-                const Eigen::Vector3f& x, const Eigen::Vector3f& xdot);
-
-  rmpcpp::PolicyValue<3> getResult();
+  rmpcpp::PolicyValue<3> evaluate(
+      const std::vector<Eigen::Vector3f>& x_observations,
+      const Eigen::Vector3f& x, const Eigen::Vector3f& xdot) const;
 
   void setR(float r) {
     tuning_.r = r;
@@ -26,7 +25,6 @@ class ParallelizedPolicy {
 
  private:
   ObstaclePolicyTuning tuning_;
-  uint num_policies_;
 
   Eigen::Vector3f s(const Eigen::Vector3f& x) const { return x / h(x.norm()); }
 
@@ -42,9 +40,6 @@ class ParallelizedPolicy {
     const float c1 = -2.f / r;
     return (c2 * s * s) + (c1 * s) + 1.f;
   }
-
-  Eigen::Vector3f Af_sum = Eigen::Vector3f::Zero();
-  Eigen::Matrix3f A_sum = Eigen::Matrix3f::Zero();
 };
 }  // namespace waverider
 

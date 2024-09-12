@@ -9,6 +9,7 @@ cs_add_library(${PROJECT_NAME}
     src/goal_policy.cc
     src/goal_policy_tuning.cc
     src/obstacle_filter.cc
+    src/obstacle_list_policy_.cc
     src/parallelized_policy.cc
     src/obstacle_policy_tuning.cc
     src/waverider_policy.cc

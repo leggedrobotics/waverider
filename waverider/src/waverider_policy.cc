@@ -21,25 +21,19 @@ rmpcpp::PolicyValue<3> WaveriderPolicy::evaluateAt(const rmpcpp::State<3>& x) {
   const Eigen::Vector3f x_pos = x.pos_.cast<float>();
   const Eigen::Vector3f x_vel = x.vel_.cast<float>();
 
-  // get all cells where we should attach a policy
+  std::vector<rmpcpp::PolicyValue<3>> all_values;
   const auto& policy_cells = obstacle_filter_.getObstacleCells();
-
-  std::vector<rmpcpp::PolicyValue<3>> all_policies;
   for (int i = 0; i < static_cast<int>(policy_cells.cell_widths.size()); i++) {
     if (i == 0 || run_all_levels_) {
-      ParallelizedPolicy pol_generator(policy_cells.centers[i].size(),
-                                       policy_tuning_);
-      pol_generator.setR(1.5f * WavemapObstacleFilter::maxRangeForHeight(i));
+      ParallelizedPolicy level_policy(tuning_);
+      level_policy.setR(1.5f * WavemapObstacleFilter::maxRangeForHeight(i));
 
-      pol_generator.evaluate(policy_cells.centers[i], x_pos, x_vel);
-      all_policies.emplace_back(pol_generator.getResult());
+      auto level_value =
+          level_policy.evaluate(policy_cells.centers[i], x_pos, x_vel);
+      all_values.emplace_back(std::move(level_value));
     }
   }
 
-  const auto avoidance_policy = rmpcpp::PolicyValue<3>::sum(all_policies);
-
-  rmpcpp::PolicyValue<3> scaled_avoidance = {avoidance_policy.f_,
-                                             avoidance_policy.A_};
-  return scaled_avoidance;
+  return rmpcpp::PolicyValue<3>::sum(all_values);
 }
 }  // namespace waverider

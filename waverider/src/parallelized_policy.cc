@@ -1,16 +1,18 @@
 #include "waverider/parallelized_policy.h"
 
 namespace waverider {
-ParallelizedPolicy::ParallelizedPolicy(uint num_policies,
-                                       ObstaclePolicyTuning tuning)
-    : tuning_(std::move(tuning)), num_policies_(num_policies) {}
+ParallelizedPolicy::ParallelizedPolicy(ObstaclePolicyTuning tuning)
+    : tuning_(std::move(tuning)) {}
 
-void ParallelizedPolicy::evaluate(const std::vector<Eigen::Vector3f>& x_obs,
-                                  const Eigen::Vector3f& x,
-                                  const Eigen::Vector3f& xdot) {
-  for (uint i = 0; i < num_policies_; ++i) {
+rmpcpp::PolicyValue<3> ParallelizedPolicy::evaluate(
+    const std::vector<Eigen::Vector3f>& x_observations,
+    const Eigen::Vector3f& x, const Eigen::Vector3f& xdot) const {
+  Eigen::Vector3f Af_sum = Eigen::Vector3f::Zero();
+  Eigen::Matrix3f A_sum = Eigen::Matrix3f::Zero();
+
+  for (const auto& x_observation : x_observations) {
     // normalize gradient
-    Eigen::Vector3f grad_d = x - x_obs[i];
+    Eigen::Vector3f grad_d = x - x_observation;
     const double d_x = std::max(grad_d.norm(), 0.0001f);
     grad_d.normalize();
 
@@ -48,9 +50,7 @@ void ParallelizedPolicy::evaluate(const std::vector<Eigen::Vector3f>& x_obs,
     A_sum += A_temp;
     Af_sum += A_temp * f_temp;
   }
-}
 
-rmpcpp::PolicyValue<3> ParallelizedPolicy::getResult() {
   return {(A_sum.completeOrthogonalDecomposition().pseudoInverse() * Af_sum)
               .cast<double>(),
           A_sum.cast<double>()};

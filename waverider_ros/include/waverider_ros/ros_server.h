@@ -3,18 +3,22 @@
 
 #include <string>
 #include <thread>
+#include <vector>
 
 #include <anymal_msgs/AnymalState.h>
 #include <rmpcpp/policies/simple_target_policy.h>
 #include <ros/ros.h>
+#include <std_msgs/Float32MultiArray.h>
 #include <std_srvs/Empty.h>
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
 #include <wavemap/core/config/config_base.h>
+#include <wavemap/core/config/string_list.h>
 #include <wavemap/core/config/value_with_unit.h>
 #include <wavemap/core/map/map_base.h>
 #include <wavemap_ros/utils/tf_transformer.h>
 #include <waverider/goal_policy.h>
 #include <waverider/goal_policy_tuning.h>
+#include <waverider/obstacle_list_policy.h>
 #include <waverider/waverider_policy.h>
 #include <waverider/yaw_policy.h>
 #include <waverider/yaw_policy_tuning.h>
@@ -22,15 +26,18 @@
 namespace waverider {
 using wavemap::FloatingPoint;
 using wavemap::SiUnit;
+using wavemap::StringList;
 using wavemap::ValueWithUnit;
 
 struct WaveriderServerConfig
-    : wavemap::ConfigBase<WaveriderServerConfig, 14, GoalPolicyTuning,
-                          YawPolicyTuning, ObstaclePolicyTuning> {
+    : wavemap::ConfigBase<WaveriderServerConfig, 16, StringList,
+                          GoalPolicyTuning, YawPolicyTuning,
+                          ObstaclePolicyTuning> {
   std::string odom_frame = "odom";
 
   std::string robot_state_topic;
   std::string twist_command_topic;
+  StringList obstacle_aabb_topics;
 
   std::string goal_tf_frame;
   std::string ground_plane_tf_frame;
@@ -46,7 +53,8 @@ struct WaveriderServerConfig
 
   GoalPolicyTuning goal_policy;
   YawPolicyTuning yaw_policy;
-  ObstaclePolicyTuning obstacle_policy;
+  ObstaclePolicyTuning map_obstacles_policy;
+  ObstaclePolicyTuning aabb_obstacles_policy;
 
   static MemberMap memberMap;
 
@@ -73,16 +81,11 @@ class WaveriderServer {
   const WaveriderServerConfig config_;
   const std::string map_frame_;
 
-  struct {
-    std::optional<rmpcpp::SE3State> data;
-    uint64_t time = 0u;
-    std::mutex mutex;
-  } robot_state_;
-
   // Wavemap-based obstacle avoidance policy
   GoalPolicy goal_policy_;
   YawPolicy yaw_policy_;
-  WaveriderPolicy obstacle_policy_;
+  WaveriderPolicy map_obstacles_policy_;
+  ObstacleListPolicy aabb_obstacles_policy_;
 
   // Asynchronous policy publishing logic
   std::atomic<bool> continue_async_planning_{false};
@@ -92,8 +95,22 @@ class WaveriderServer {
 
   // ROS interfaces
   void subscribeToTopics(ros::NodeHandle& nh);
-  ros::Subscriber robot_state_sub_;
   wavemap::TfTransformer transformer_;
+
+  ros::Subscriber robot_state_sub_;
+  struct {
+    std::optional<rmpcpp::SE3State> data;
+    uint64_t time = 0u;
+    std::mutex mutex;
+  } robot_state_;
+
+  std::vector<ros::Subscriber> aabb_subs_;
+  struct {
+    std::vector<ObstacleListPolicy::ObstacleList> data;
+    std::mutex mutex;
+  } aabb_lists_;
+  void parseAabbMsg(const std_msgs::Float32MultiArray& msg,
+                    ObstacleListPolicy::ObstacleList& aabb_list);
 
   void advertiseTopics(ros::NodeHandle& nh_private);
   ros::Publisher policy_pub_;
