@@ -37,3 +37,7 @@ aabb_obstacles_policy:
   eta_damp: 300.0  # damping -> based on robot velocity to obstacle
   enable_damper: true
   enable_repulsor: true
+goal_policy_marker_scale: 0.1
+yaw_policy_marker_scale: 0.1
+map_obstacles_policy_marker_scale: 0.1
+aabb_obstacles_policy_marker_scale: 0.1

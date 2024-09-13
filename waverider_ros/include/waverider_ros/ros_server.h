@@ -30,7 +30,7 @@ using wavemap::StringList;
 using wavemap::ValueWithUnit;
 
 struct WaveriderServerConfig
-    : wavemap::ConfigBase<WaveriderServerConfig, 16, StringList,
+    : wavemap::ConfigBase<WaveriderServerConfig, 20, StringList,
                           GoalPolicyTuning, YawPolicyTuning,
                           ObstaclePolicyTuning> {
   std::string odom_frame = "odom";
@@ -55,6 +55,10 @@ struct WaveriderServerConfig
   YawPolicyTuning yaw_policy;
   ObstaclePolicyTuning map_obstacles_policy;
   ObstaclePolicyTuning aabb_obstacles_policy;
+  FloatingPoint goal_policy_marker_scale = 0.1f;
+  FloatingPoint yaw_policy_marker_scale = 0.1f;
+  FloatingPoint map_obstacles_policy_marker_scale = 0.1f;
+  FloatingPoint aabb_obstacles_policy_marker_scale = 0.1f;
 
   static MemberMap memberMap;
 

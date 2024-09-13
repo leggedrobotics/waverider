@@ -28,7 +28,11 @@ DECLARE_CONFIG_MEMBERS(WaveriderServerConfig,
                       (goal_policy)
                       (yaw_policy)
                       (map_obstacles_policy)
-                      (aabb_obstacles_policy));
+                      (aabb_obstacles_policy)
+                      (goal_policy_marker_scale)
+                      (yaw_policy_marker_scale)
+                      (map_obstacles_policy_marker_scale)
+                      (aabb_obstacles_policy_marker_scale));
 
 bool WaveriderServerConfig::isValid(bool verbose) const {
   bool all_valid = true;
@@ -290,53 +294,65 @@ void WaveriderServer::evaluateAndPublishPolicy() {
                               map_frame_, "v_yaw", 0.f, 0.f, 1.f));
         }
         {
-          const Vector3D f_goal_r2 = {
-              static_cast<float>(attractor_se2_value.f_.x()),
-              static_cast<float>(attractor_se2_value.f_.y()), 0.f};
+          const Vector3D f_goal_r2 =
+              config_.goal_policy_marker_scale *
+              Vector3D{static_cast<float>(attractor_se2_value.f_.x()),
+                       static_cast<float>(attractor_se2_value.f_.y()), 0.f};
           marker_array.markers.emplace_back(
               commandToMarker(current_state.p().cast<float>(), f_goal_r2,
                               map_frame_, "f_goal_r2", 0.f, 1.f, 0.f));
-          const Vector3D f_goal_yaw = {
-              0.f, 0.f, static_cast<float>(attractor_se2_value.f_.z())};
+          const Vector3D f_goal_yaw =
+              config_.goal_policy_marker_scale *
+              Vector3D{0.f, 0.f,
+                       static_cast<float>(attractor_se2_value.f_.z())};
           marker_array.markers.emplace_back(
               commandToMarker(current_state.p().cast<float>(), f_goal_yaw,
                               map_frame_, "f_goal_yaw", 0.f, 1.f, 0.f));
         }
         {
-          const Vector3D f_yaw_r2 = {static_cast<float>(yaw_se2_value.f_.x()),
-                                     static_cast<float>(yaw_se2_value.f_.y()),
-                                     0.f};
+          const Vector3D f_yaw_r2 =
+              config_.yaw_policy_marker_scale *
+              Vector3D{static_cast<float>(yaw_se2_value.f_.x()),
+                       static_cast<float>(yaw_se2_value.f_.y()), 0.f};
           marker_array.markers.emplace_back(
               commandToMarker(current_state.p().cast<float>(), f_yaw_r2,
                               map_frame_, "f_yaw_r2", 1.f, 1.f, 0.f));
-          const Vector3D f_yaw_yaw = {0.f, 0.f,
-                                      static_cast<float>(yaw_se2_value.f_.z())};
+          const Vector3D f_yaw_yaw =
+              config_.yaw_policy_marker_scale *
+              Vector3D{0.f, 0.f, static_cast<float>(yaw_se2_value.f_.z())};
           marker_array.markers.emplace_back(
               commandToMarker(current_state.p().cast<float>(), f_yaw_yaw,
                               map_frame_, "f_yaw_yaw", 1.f, 1.f, 0.f));
         }
         {
-          const Vector3D f_map_obstacles_r2 = {
-              static_cast<float>(map_obstacles_se2_value.f_.x()),
-              static_cast<float>(map_obstacles_se2_value.f_.y()), 0.f};
+          const Vector3D f_map_obstacles_r2 =
+              config_.map_obstacles_policy_marker_scale *
+              Vector3D{static_cast<float>(map_obstacles_se2_value.f_.x()),
+                       static_cast<float>(map_obstacles_se2_value.f_.y()), 0.f};
           marker_array.markers.emplace_back(commandToMarker(
               current_state.p().cast<float>(), f_map_obstacles_r2, map_frame_,
               "f_map_obstacles_r2", 1.f, 0.f, 0.f));
-          const Vector3D f_map_obstacles_yaw = {
-              0.f, 0.f, static_cast<float>(map_obstacles_se2_value.f_.z())};
+          const Vector3D f_map_obstacles_yaw =
+              config_.map_obstacles_policy_marker_scale *
+              Vector3D{0.f, 0.f,
+                       static_cast<float>(map_obstacles_se2_value.f_.z())};
           marker_array.markers.emplace_back(commandToMarker(
               current_state.p().cast<float>(), f_map_obstacles_yaw, map_frame_,
               "f_map_obstacles_yaw", 1.f, 0.f, 0.f));
         }
         {
-          const Vector3D f_aabb_obstacles_r2 = {
-              static_cast<float>(aabb_obstacles_se2_value.f_.x()),
-              static_cast<float>(aabb_obstacles_se2_value.f_.y()), 0.f};
+          const Vector3D f_aabb_obstacles_r2 =
+              config_.aabb_obstacles_policy_marker_scale *
+              Vector3D{static_cast<float>(aabb_obstacles_se2_value.f_.x()),
+                       static_cast<float>(aabb_obstacles_se2_value.f_.y()),
+                       0.f};
           marker_array.markers.emplace_back(commandToMarker(
               current_state.p().cast<float>(), f_aabb_obstacles_r2, map_frame_,
               "f_aabb_obstacles_r2", 1.f, 0.f, 0.f));
-          const Vector3D f_aabb_obstacles_yaw = {
-              0.f, 0.f, static_cast<float>(aabb_obstacles_se2_value.f_.z())};
+          const Vector3D f_aabb_obstacles_yaw =
+              config_.aabb_obstacles_policy_marker_scale *
+              Vector3D{0.f, 0.f,
+                       static_cast<float>(aabb_obstacles_se2_value.f_.z())};
           marker_array.markers.emplace_back(commandToMarker(
               current_state.p().cast<float>(), f_aabb_obstacles_yaw, map_frame_,
               "f_aabb_obstacles_yaw", 1.f, 0.f, 0.f));
@@ -421,7 +437,7 @@ std::optional<Point3D> WaveriderServer::getGoalFromTf() {
       ros::Time::now() - ros::Duration(config_.tf_lookup_delay);
   wavemap::Transformation3D T_W_G;
   if (transformer_.lookupLatestTransform(map_frame_, config_.goal_tf_frame,
-                                    T_W_G)) {
+                                         T_W_G)) {
     return T_W_G.getPosition();
   }
   return std::nullopt;
@@ -431,8 +447,8 @@ std::optional<Plane3D> WaveriderServer::getGroundPlaneFromTf() {
   ros::Time lookup_time =
       ros::Time::now() - ros::Duration(config_.tf_lookup_delay);
   wavemap::Transformation3D T_W_G;
-  if (transformer_.lookupLatestTransform(map_frame_, config_.ground_plane_tf_frame,
-                                    T_W_G)) {
+  if (transformer_.lookupLatestTransform(
+          map_frame_, config_.ground_plane_tf_frame, T_W_G)) {
     Plane3D ground_plane;
     ground_plane.normal = T_W_G.getRotation().rotate(Vector3D::UnitZ());
     ground_plane.offset = ground_plane.normal.dot(T_W_G.getPosition()) +
