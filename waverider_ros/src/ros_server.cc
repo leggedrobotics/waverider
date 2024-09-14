@@ -226,6 +226,7 @@ void WaveriderServer::evaluateAndPublishPolicy() {
       return;
     }
     goal_policy_.setTarget(goal->cast<double>());
+    yaw_policy_.setTarget(goal->cast<double>());
   }
 
   // Forward integrate the state and policy to obtain velocity reference
