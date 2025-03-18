@@ -3,7 +3,7 @@
 
   <!-- Params -->
   <arg name="wavemap_param_file"
-       default="$(find wavemap_ros)/config/wavemap_anymal_d039.yaml"
+       default="$(find wavemap_ros)/config/wavemap_anymal_sim.yaml"
        doc="Name of the file from which to read wavemap's server params."/>
   <arg name="waverider_param_file"
        default="$(find waverider_ros)/config/alma.yaml"

@@ -1,14 +1,14 @@
 odom_frame: "odom"
-robot_state_topic: "/state_estimator/anymal_state"
-twist_command_topic: "/path_planning_and_following/twist"
+robot_state_topic: "/state_estimator/alma_state"
+twist_command_topic: "/twist_mux/twist"
 obstacle_aabb_topics:
   - "/depth_camera_front_upper/aligned_depth_to_infra1/bboxes"
   - "/depth_camera_rear_upper/aligned_depth_to_infra1/bboxes"
   - "/depth_camera_left/aligned_depth_to_infra1/bboxes"
   - "/depth_camera_right/aligned_depth_to_infra1/bboxes"
-goal_tf_frame: "waverider_goal"
+goal_tf_frame: "waverider_target_frame"
 ground_plane_tf_frame: "footprint"
-tf_lookup_delay: { seconds: 0.05 }
+tf_lookup_delay: { seconds: 1 }
 occupancy_threshold: 0.1
 control_period: { seconds: 0.02 }
 integrator_step_size: { seconds: 0.005 }
