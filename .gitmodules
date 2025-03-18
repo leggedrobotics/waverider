@@ -1,0 +1,6 @@
+[submodule "dependencies/wavemap"]
+	path = dependencies/wavemap
+	url = git@github.com:ethz-asl/wavemap.git
+[submodule "dependencies/rmpcpp"]
+	path = dependencies/rmpcpp
+	url = git@github.com:leggedrobotics/rmpcpp.git
