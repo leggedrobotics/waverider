@@ -437,7 +437,7 @@ std::optional<Point3D> WaveriderServer::getGoalFromTf() {
   ros::Time lookup_time =
       ros::Time::now() - ros::Duration(config_.tf_lookup_delay);
   wavemap::Transformation3D T_W_G;
-  if (transformer_.lookupLatestTransform(map_frame_, config_.goal_tf_frame,
+  if (transformer_.lookupTransform(map_frame_, config_.goal_tf_frame, lookup_time,
                                          T_W_G)) {
     return T_W_G.getPosition();
   }

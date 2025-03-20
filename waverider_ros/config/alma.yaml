@@ -8,7 +8,7 @@ obstacle_aabb_topics:
   - "/depth_camera_right/aligned_depth_to_infra1/bboxes"
 goal_tf_frame: "waverider_target_frame"
 ground_plane_tf_frame: "footprint"
-tf_lookup_delay: { seconds: 1 }
+tf_lookup_delay: { seconds: 0.02 }
 occupancy_threshold: 0.1
 control_period: { seconds: 0.02 }
 integrator_step_size: { seconds: 0.005 }
