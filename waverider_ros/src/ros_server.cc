@@ -220,23 +220,26 @@ void WaveriderServer::evaluateAndPublishPolicy() {
 
   // Get the goal position
   {
-    // const auto goal = getGoalFromTf();
-    // const auto goal_position = goal.getPosition();
-    // const auto goal_orientation = goal.getOrientation();
-    const auto goal_position = getPositionGoalFromTf();
+    ros::Time lookup_time =
+      ros::Time::now() - ros::Duration(config_.tf_lookup_delay);
+
+    const auto goal_position = getPositionGoalFromTf(lookup_time);
     if (!goal_position.has_value()) {
       ROS_INFO_THROTTLE(1, "Goal position not set. Will do nothing.");
       return;
     }
-
-    const Eigen::Quaternion<float> goal_orientation = getOrientationGoalFromTf();
-    // convert to yaw-only target
-    float siny_cosp = 2 * (goal_orientation.w() * goal_orientation.z() + goal_orientation.x() * goal_orientation.y());
-    float cosy_cosp = 1 - 2 * (goal_orientation.y() * goal_orientation.y() + goal_orientation.z() * goal_orientation.z());
-    const float yaw = std::atan2(siny_cosp, cosy_cosp);
-    
     goal_policy_.setTarget(goal_position->cast<double>());
-    yaw_policy_.setTarget(goal_position->cast<double>(), static_cast<double>(yaw));
+
+    if (config_.yaw_policy.track_yaw_goal == true) {
+      const Eigen::Quaternion<float> goal_orientation = getOrientationGoalFromTf(lookup_time);
+      
+      // convert to yaw-only target
+      float siny_cosp = 2 * (goal_orientation.w() * goal_orientation.z() + goal_orientation.x() * goal_orientation.y());
+      float cosy_cosp = 1 - 2 * (goal_orientation.y() * goal_orientation.y() + goal_orientation.z() * goal_orientation.z());
+      const float yaw = std::atan2(siny_cosp, cosy_cosp);
+      
+      yaw_policy_.setTarget(goal_position->cast<double>(), static_cast<double>(yaw));
+    }
   }
 
   // Forward integrate the state and policy to obtain velocity reference
@@ -443,29 +446,21 @@ void WaveriderServer::advertiseTopics(ros::NodeHandle& nh_private) {
       "policy_visuals", 1);
 }
 
-std::optional<Point3D> WaveriderServer::getPositionGoalFromTf() {
-// std::optional<wavemap::Transformation3D> WaveriderServer::getGoalFromTf() {
-  ros::Time lookup_time =
-      ros::Time::now() - ros::Duration(config_.tf_lookup_delay);
+std::optional<Point3D> WaveriderServer::getPositionGoalFromTf(ros::Time lookup_time) {
   wavemap::Transformation3D T_W_G;
   if (transformer_.lookupTransform(map_frame_, config_.goal_tf_frame, lookup_time,
                                          T_W_G)) {
-    // return T_W_G;
     return T_W_G.getPosition();
   }
   return std::nullopt;
 }
 
-Eigen::Quaternion<float> WaveriderServer::getOrientationGoalFromTf() {
-// std::optional<wavemap::Transformation3D> WaveriderServer::getGoalFromTf() {
-  ros::Time lookup_time =
-      ros::Time::now() - ros::Duration(config_.tf_lookup_delay);
+Eigen::Quaternion<float> WaveriderServer::getOrientationGoalFromTf(ros::Time lookup_time) {
+  // orientation is checked after the position check succedes, so we can assume this doesn't fail
   wavemap::Transformation3D T_W_G;
-  if (transformer_.lookupTransform(map_frame_, config_.goal_tf_frame, lookup_time,
-                                         T_W_G)) {
-    // return T_W_G;
-    return T_W_G.getEigenQuaternion();
-  }
+  transformer_.lookupTransform(map_frame_, config_.goal_tf_frame, lookup_time, T_W_G);
+
+  return T_W_G.getEigenQuaternion();  
 }
 
 std::optional<Plane3D> WaveriderServer::getGroundPlaneFromTf() {

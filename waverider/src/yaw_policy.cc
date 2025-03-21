@@ -13,11 +13,15 @@ YawPolicy::PValue YawPolicy::evaluateAt(const YawPolicy::PState& state) {
   const double speed = state.vel_.head<2>().norm();
   const double alpha_scaled = tuning_.alpha * std::min(speed, 1.0);
   const double yaw = state.pos_[2];
-  // const double yaw_target =
-  //     std::atan2(state.vel_.y(), state.vel_.x()) + tuning_.angle_forward;
-  const double yaw_target = targetOrientation_;
-      // std::atan2(targetPosition_.y() - state.pos_[1], targetPosition_.x() - state.pos_[0]) +
-      // tuning_.angle_forward;
+  double yaw_target;
+
+  if (tuning_.track_yaw_goal) {
+    yaw_target = targetOrientation_;
+  }
+  else {
+    yaw_target = std::atan2(state.vel_.y(), state.vel_.x()) + tuning_.angle_forward;
+  }
+
   const double yaw_error = wrapAngle(yaw_target - yaw);
   const Eigen::Vector3d error{0.0, 0.0, yaw_error};
   const Eigen::Vector3d v{0.0, 0.0, state.vel_[2]};

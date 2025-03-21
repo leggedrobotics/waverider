@@ -120,9 +120,8 @@ class WaveriderServer {
   ros::Publisher policy_pub_;
   ros::Publisher debug_pub_;
 
-  // std::optional<wavemap::Transformation3D> getGoalFromTf();
-  std::optional<Point3D> getPositionGoalFromTf();
-  Eigen::Quaternion<float> getOrientationGoalFromTf();
+  std::optional<Point3D> getPositionGoalFromTf(ros::Time lookup_time);
+  Eigen::Quaternion<float> getOrientationGoalFromTf(ros::Time lookup_time);
   std::optional<Plane3D> getGroundPlaneFromTf();
 };
 }  // namespace waverider

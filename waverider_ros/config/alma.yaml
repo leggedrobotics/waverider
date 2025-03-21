@@ -25,6 +25,7 @@ yaw_policy:
   c: 0.1
   a: 20.0
   angle_forward: { degrees: 0.0 }
+  track_yaw_goal: true # if false the yaw goal is dynamically adjusted to have the robot facing the goal
 map_obstacles_policy:
   c: 0.1
   eta_rep: 30.0

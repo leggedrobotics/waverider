@@ -16,6 +16,8 @@ struct YawPolicyTuning : wavemap::ConfigBase<YawPolicyTuning, 5> {
   //! Angle that is considered as 'facing forward'
   wavemap::ValueWithUnit<wavemap::SiUnit::kRadians, float> angle_forward = 0.f;
 
+  bool track_yaw_goal = false;
+
   static MemberMap memberMap;
 
   bool isValid(bool verbose) const override;
