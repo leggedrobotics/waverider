@@ -15,15 +15,19 @@ class YawPolicy : public rmpcpp::PolicyBase<rmpcpp::Space<3>> {
 
   void setTuning(const YawPolicyTuning& tuning);
 
-  void setTarget(const Vector& target) { target_ = target; }
+  void setTarget(const Vector& target_position, const double target_orientation) { 
+    targetPosition_ = target_position;
+    targetOrientation_ = target_orientation;
+    }
 
-  Vector& target() { return target_; }
+  // Vector& target() { return targetOrientation_; }
 
   PValue evaluateAt(const PState& state) override;
 
  protected:
   YawPolicyTuning tuning_;
-  Vector target_ = Vector::Zero();
+  double targetOrientation_ = 0.0;
+  Vector targetPosition_ = Vector::Zero();
 
   /**
    *  Normalization helper function.
