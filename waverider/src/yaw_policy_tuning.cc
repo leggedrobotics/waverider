@@ -6,7 +6,8 @@ DECLARE_CONFIG_MEMBERS(YawPolicyTuning,
                       (beta)
                       (c)
                       (a)
-                      (angle_forward));
+                      (angle_forward)
+                      (track_yaw_goal));
 
 bool YawPolicyTuning::isValid(bool verbose) const {
   bool is_valid = true;

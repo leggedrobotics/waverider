@@ -19,7 +19,7 @@ YawPolicy::PValue YawPolicy::evaluateAt(const YawPolicy::PState& state) {
     yaw_target = targetOrientation_;
   }
   else {
-    yaw_target = std::atan2(state.vel_.y(), state.vel_.x()) + tuning_.angle_forward;
+    yaw_target = std::atan2(targetPosition_.y() - state.pos_[1], targetPosition_.x() - state.pos_[0]) + tuning_.angle_forward;
   }
 
   const double yaw_error = wrapAngle(yaw_target - yaw);

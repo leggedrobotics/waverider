@@ -230,16 +230,16 @@ void WaveriderServer::evaluateAndPublishPolicy() {
     }
     goal_policy_.setTarget(goal_position->cast<double>());
 
-    if (config_.yaw_policy.track_yaw_goal == true) {
+    float yaw;
+    if (config_.yaw_policy.track_yaw_goal) {
       const Eigen::Quaternion<float> goal_orientation = getOrientationGoalFromTf(lookup_time);
       
-      // convert to yaw-only target
       float siny_cosp = 2 * (goal_orientation.w() * goal_orientation.z() + goal_orientation.x() * goal_orientation.y());
       float cosy_cosp = 1 - 2 * (goal_orientation.y() * goal_orientation.y() + goal_orientation.z() * goal_orientation.z());
-      const float yaw = std::atan2(siny_cosp, cosy_cosp);
-      
-      yaw_policy_.setTarget(goal_position->cast<double>(), static_cast<double>(yaw));
+      yaw = std::atan2(siny_cosp, cosy_cosp);
     }
+
+    yaw_policy_.setTarget(goal_position->cast<double>(), static_cast<double>(yaw));
   }
 
   // Forward integrate the state and policy to obtain velocity reference
