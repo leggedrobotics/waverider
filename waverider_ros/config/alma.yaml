@@ -13,22 +13,22 @@ occupancy_threshold: 0.1
 control_period: { seconds: 0.02 }
 integrator_step_size: { seconds: 0.005 }
 publish_debug_visuals_every_n_iterations: 20
-ground_plane_offset: { meters: 0.10 }
+ground_plane_offset: { meters: 0.15 }
 goal_policy:
-  alpha: 25.0
+  alpha: 35.0
   beta: 35.0
   c: 0.2
-  a: 20.0
+  a: 40.0
 yaw_policy:
-  alpha: 15.0
-  beta: 20.0
+  alpha: 60.0
+  beta: 30.0
   c: 0.1
-  a: 20.0
+  a: 60.0
   angle_forward: { degrees: 0.0 }
   track_yaw_goal: true # if false the yaw goal is dynamically adjusted to have the robot facing the goal
 map_obstacles_policy:
-  c: 0.1
-  eta_rep: 30.0
+  c: 0.05
+  eta_rep: 20.0
   eta_damp: 340.0
   enable_damper: true
   enable_repulsor: true
