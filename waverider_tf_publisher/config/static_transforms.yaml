@@ -1,0 +1,62 @@
+# Transform configuration for wavemap ROS1 module
+# List of transforms to be published to tf_static
+
+- parent_frame: "odom"
+  child_frame: "f_ground"
+  translation:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  # You can specify rotation as either quaternion or Euler angles
+  rotation:
+    roll: 0.0
+    pitch: 0.0
+    yaw: 0.0
+
+- parent_frame: "odom"
+  child_frame: "waverider_target_frame"
+  translation:
+    x: 2.25
+    y: 0.0
+    z: 2.0
+  quaternion:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    w: 1.0
+
+- parent_frame: "chassis"
+  child_frame: "camera_link"
+  translation:
+    x: 0.0588
+    y: 0.0175
+    z: 0.102
+  rotation:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    w: 1.0
+
+- parent_frame: "camera_link"
+  child_frame: "camera_link_optical"
+  translation:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  rotation:
+    x: 0.5
+    y: -0.4999999999999999
+    z: 0.5
+    w: -0.5000000000000001
+
+- parent_frame: "chassis"
+  child_frame: "imu_link"
+  translation:
+    x: -0.08
+    y: 0.08
+    z: 0.05
+  rotation:
+    x: 0.0
+    y: 1.0
+    z: 0.0
+    w: 6.123233995736766e-17

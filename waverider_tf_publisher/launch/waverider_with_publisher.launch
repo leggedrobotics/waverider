@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- Path to the YAML file containing transforms -->
+  <arg name="yaml_file" default="$(find wavemap_tf_publisher)/config/transforms.yaml"/>
+  
+  <!-- Launch the YAML TF Static Publisher node -->
+  <include file="$(find wavemap_tf_publisher)/launch/yaml_tf_publisher.launch">
+    <arg name="yaml_file" value="$(arg yaml_file)"/>
+  </include>
+  
+  <!-- You can include your other wavemap launch files here -->
+  <!-- 
+  <include file="$(find your_other_wavemap_package)/launch/your_launch_file.launch" />
+  -->
+</launch>

@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- Path to the YAML file containing transforms -->
+  <arg name="yaml_file" default="$(find waverider_tf_publisher)/config/static_transforms.yaml"/>
+  
+  <!-- Launch the YAML TF Static Publisher node -->
+  <node pkg="waverider_tf_publisher" type="yaml_tf_static_publisher.py" name="yaml_tf_static_publisher" output="screen">
+    <param name="yaml_file" value="$(arg yaml_file)"/>
+  </node>
+</launch>
