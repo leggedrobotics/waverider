@@ -9,6 +9,7 @@
 #include <wavemap/core/map/hashed_wavelet_octree.h>
 
 #include "waverider/common.h"
+#include <mutex>
 
 namespace waverider {
 struct ObstacleCells {

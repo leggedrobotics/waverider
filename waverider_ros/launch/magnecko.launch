@@ -1,0 +1,47 @@
+<launch>
+  <!--param name="/use_sim_time" value="true"/ -->
+
+  <!-- Params -->
+  <arg name="wavemap_param_file"
+       default="$(find wavemap_ros)/config/wavemap_magnecko_sim.yaml"
+       doc="Name of the file from which to read wavemap's server params."/>
+  <arg name="waverider_param_file"
+       default="$(find waverider_ros)/config/magnecko.yaml"
+       doc="Name of the file from which to read waverider's server params."/>
+  <arg name="rosbag_path"
+       default=""
+       doc="Replay the rosbag at the specified path. Can be left blank."/>
+  <!-- NOTE: Relative paths will be resolved w.r.t. ROS_HOME (default ~/.ros) -->
+  <arg name="rosbag_skip_first_n_sec"
+       default="0"
+       doc="Skip the first n seconds of the rosbag."/>
+  <arg name="show_rviz" default="false"/>
+
+  <!-- Simulate goal TF frame -->
+  <!-- node pkg="tf"
+        type="static_transform_publisher"
+        name="pub_goal_tf_frame"
+        args="10.0 10.0 0.6 0.0 0.0 0.0 1.000
+            map waverider_goal 100"/ -->
+
+  <!-- Run waverider -->
+  <node name="waverider_server" pkg="waverider_ros"
+        type="ros_server"
+        output="screen" launch-prefix="">
+    <rosparam ns="mapper" file="$(arg wavemap_param_file)"/>
+    <rosparam ns="planner" file="$(arg waverider_param_file)"/>
+  </node>
+
+  <group if="$(arg show_rviz)">
+    <arg name="rviz_file"
+         default="$(find waverider_ros)/config/waverider_server.rviz"/>
+    <node pkg="rviz" type="rviz" name="$(anon rviz)" output="screen"
+          args="-d $(arg rviz_file)"/>
+  </group>
+
+  <!-- Replay a bag -->
+  <group unless="$(eval arg('rosbag_path') == '')">
+    <node pkg="rosbag" type="play" name="rosbag_play" output="screen"
+          args="-r 1.0 -s $(arg rosbag_skip_first_n_sec) -q --clock $(arg rosbag_path)"/>
+  </group>
+</launch>

@@ -5,7 +5,7 @@
 #include <thread>
 #include <vector>
 
-#include <anymal_msgs/AnymalState.h>
+#include <magnecko_msgs/MagneckoWaveriderState.h>
 #include <rmpcpp/policies/simple_target_policy.h>
 #include <ros/ros.h>
 #include <std_msgs/Float32MultiArray.h>
@@ -79,7 +79,7 @@ class WaveriderServer {
     continue_async_planning_.store(false, std::memory_order_relaxed);
   }
 
-  void robotStateCallback(anymal_msgs::AnymalState robot_state_msg);
+  void robotStateCallback(magnecko_msgs::MagneckoWaveriderState robot_state_msg);
 
  private:
   const WaveriderServerConfig config_;

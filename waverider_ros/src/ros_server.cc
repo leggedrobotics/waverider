@@ -130,7 +130,7 @@ void WaveriderServer::startPlanningAsync() {
 }
 
 void WaveriderServer::robotStateCallback(
-    anymal_msgs::AnymalState robot_state_msg) {
+    magnecko_msgs::MagneckoWaveriderState robot_state_msg) {
   ProfilerZoneScoped;
   // Get the velocities in body frame
   const Eigen::Vector3d B_v_B(robot_state_msg.twist.twist.linear.x,
@@ -466,6 +466,7 @@ Eigen::Quaternion<float> WaveriderServer::getOrientationGoalFromTf(ros::Time loo
 std::optional<Plane3D> WaveriderServer::getGroundPlaneFromTf() {
   ros::Time lookup_time =
       ros::Time::now() - ros::Duration(config_.tf_lookup_delay);
+  ROS_INFO("Ground plane lookup time: %f", lookup_time.toSec());
   wavemap::Transformation3D T_W_G;
   if (transformer_.lookupLatestTransform(
           map_frame_, config_.ground_plane_tf_frame, T_W_G)) {
@@ -473,6 +474,7 @@ std::optional<Plane3D> WaveriderServer::getGroundPlaneFromTf() {
     ground_plane.normal = T_W_G.getRotation().rotate(Vector3D::UnitZ());
     ground_plane.offset = ground_plane.normal.dot(T_W_G.getPosition()) +
                           config_.ground_plane_offset;
+    ROS_INFO("Ground plane offset: %f", ground_plane.offset);
     return ground_plane;
   }
   return std::nullopt;
