@@ -31,12 +31,35 @@ class YamlTfStaticPublisher:
         
         # Static transform broadcaster
         self.static_broadcaster = tf2_ros.StaticTransformBroadcaster()
+
+        # Surface Transform Subscriber
+        self.surface_transform_subscriber = rospy.Subscriber(
+            '/surface_transform',
+            geometry_msgs.msg.TransformStamped,
+            self.handle_surface_transform,
+            queue_size=10
+        )
+        rospy.loginfo("Surface Transform Subscriber initialized")
+        self.surface_transform = None
         
         # Load and publish transforms
         self.load_and_publish_transforms(yaml_file)
         
         rospy.loginfo(f"Successfully loaded transforms from {yaml_file}")
 
+    def handle_surface_transform(self, msg):
+        # This method can be used to handle incoming surface transforms if needed
+        rospy.loginfo(f"Received surface transform: {msg.header.frame_id} -> {msg.child_frame_id}")
+        # Here you could process the transform and store it for later use
+        surface_transform = geometry_msgs.msg.TransformStamped()
+        surface_transform.header = msg.header
+        surface_transform.child_frame_id = msg.child_frame_id
+        surface_transform.transform = msg.transform
+
+        self.surface_transform = surface_transform
+        
+        self.load_and_publish_transforms(yaml_file=rospy.get_param('~yaml_file', ''))
+    
     def load_and_publish_transforms(self, yaml_file):
         try:
             with open(yaml_file, 'r') as file:
@@ -84,6 +107,16 @@ class YamlTfStaticPublisher:
                 
                 static_transforms.append(static_transform)
                 rospy.loginfo(f"Added transform: {transform['parent_frame']} -> {transform['child_frame']}")
+
+            if self.surface_transform:
+                # Remove static transform with child_frame_id 'f_ground'
+                static_transforms = [
+                    t for t in static_transforms if t.child_frame_id != 'f_ground'
+                ]
+                self.surface_transform.header.frame_id = 'odom'
+                self.surface_transform.child_frame_id = 'f_ground'
+                static_transforms.append(self.surface_transform)
+                rospy.loginfo(f"Added surface transform: {self.surface_transform.header.frame_id} -> {self.surface_transform.child_frame_id}")
             
             # Publish all transforms
             if static_transforms:
