@@ -474,6 +474,8 @@ std::optional<Plane3D> WaveriderServer::getGroundPlaneFromTf() {
     ground_plane.normal = T_W_G.getRotation().rotate(Vector3D::UnitZ());
     ground_plane.offset = ground_plane.normal.dot(T_W_G.getPosition()) +
                           config_.ground_plane_offset;
+    // Assume fixed offset for the ground plane
+    ground_plane.offset = 0.1;
     ROS_INFO("Ground plane offset: %f", ground_plane.offset);
     return ground_plane;
   }
