@@ -1,6 +1,7 @@
 odom_frame: "odom"
 robot_state_topic: "/magnecko_waverider_state"
 twist_command_topic: "/twist_mux/twist"
+ferrous_surfaces_topic: "/ferrous_surfaces"
 obstacle_aabb_topics:
   - "/depth_camera_front_upper/aligned_depth_to_infra1/bboxes"
   - "/depth_camera_rear_upper/aligned_depth_to_infra1/bboxes"
@@ -19,10 +20,17 @@ goal_policy:
   beta: 35.0
   c: 0.2
   a: 20.0
+ferrous_surfaces_policy:
+  alpha: 15.0
+  lambda: 2.0
+  r: 5.0
+  kappa: 5.0
+  c: 0.1
+  a: 20.0
 yaw_policy:
   alpha: 15.0
   beta: 20.0
-  c: 0.1
+  c: 0.2
   a: 20.0
   angle_forward: { degrees: 0.0 }
   track_yaw_goal: true # if false the yaw goal is dynamically adjusted to have the robot facing the goal
@@ -39,6 +47,7 @@ aabb_obstacles_policy:
   enable_damper: true
   enable_repulsor: true
 goal_policy_marker_scale: 0.1
+ferrous_surfaces_policy_marker_scale: 0.1
 yaw_policy_marker_scale: 0.1
 map_obstacles_policy_marker_scale: 0.1
 aabb_obstacles_policy_marker_scale: 0.1

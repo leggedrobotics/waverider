@@ -16,6 +16,7 @@ DECLARE_CONFIG_MEMBERS(WaveriderServerConfig,
                       (odom_frame)
                       (robot_state_topic)
                       (twist_command_topic)
+                      (ferrous_surfaces_topic)
                       (obstacle_aabb_topics)
                       (goal_tf_frame)
                       (ground_plane_tf_frame)
@@ -26,10 +27,12 @@ DECLARE_CONFIG_MEMBERS(WaveriderServerConfig,
                       (integrator_step_size)
                       (publish_debug_visuals_every_n_iterations)
                       (goal_policy)
+                      (ferrous_surfaces_policy)
                       (yaw_policy)
                       (map_obstacles_policy)
                       (aabb_obstacles_policy)
                       (goal_policy_marker_scale)
+                      (ferrous_surface_policy_marker_scale)
                       (yaw_policy_marker_scale)
                       (map_obstacles_policy_marker_scale)
                       (aabb_obstacles_policy_marker_scale));
@@ -40,11 +43,13 @@ bool WaveriderServerConfig::isValid(bool verbose) const {
   all_valid &= IS_PARAM_NE(odom_frame, "", verbose);
   all_valid &= IS_PARAM_NE(robot_state_topic, "", verbose);
   all_valid &= IS_PARAM_NE(twist_command_topic, "", verbose);
+  all_valid &= IS_PARAM_NE(ferrous_surfaces_topic, "", verbose);
   all_valid &= IS_PARAM_NE(goal_tf_frame, "", verbose);
   all_valid &= IS_PARAM_NE(ground_plane_tf_frame, "", verbose);
   all_valid &= IS_PARAM_GE(tf_lookup_delay, 0.f, verbose);
   all_valid &= IS_PARAM_GT(control_period, 0.f, verbose);
   all_valid &= IS_PARAM_TRUE(goal_policy.isValid(verbose), verbose);
+  all_valid &= IS_PARAM_TRUE(ferrous_surfaces_policy.isValid(verbose), verbose);
   all_valid &= IS_PARAM_TRUE(yaw_policy.isValid(verbose), verbose);
   all_valid &= IS_PARAM_TRUE(map_obstacles_policy.isValid(verbose), verbose);
   all_valid &= IS_PARAM_TRUE(aabb_obstacles_policy.isValid(verbose), verbose);
@@ -69,6 +74,8 @@ WaveriderServer::WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private,
 
   // Configure goal policy
   goal_policy_.setTuning(config_.goal_policy);
+  // Configure ferrous surface policy
+  ferrous_surface_policy_.setTuning(config_.ferrous_surfaces_policy);
   // Configure yaw policy
   yaw_policy_.setTuning(config_.yaw_policy);
   // Configure map obstacle avoidance policy
@@ -262,6 +269,12 @@ void WaveriderServer::evaluateAndPublishPolicy() {
     auto attractor_se2_value =
         R3toSE2{}.at(propagated_state_r3).pull(attractor_r3_value);
 
+    // Evaluate the ferrous surface policy
+    // auto ferrous_surface_r3_value =
+    //     ferrous_surface_policy_.evaluateAt(propagated_state_r3);
+    // auto ferrous_surface_se2_value =
+    //     R3toSE2{}.at(propagated_state_r3).pull(ferrous_surface_r3_value);
+
     // Evaluate the yaw policy
     auto yaw_se2_value = yaw_policy_.evaluateAt(propagated_state);
 
@@ -278,8 +291,10 @@ void WaveriderServer::evaluateAndPublishPolicy() {
         R3toSE2{}.at(propagated_state_r3).pull(aabb_obstacles_r3_value);
 
     // Apply the policies by integrating their commanded accelerations
+    // const auto value_total = attractor_se2_value + ferrous_surface_se2_value + yaw_se2_value +
+    //                          map_obstacles_se2_value + aabb_obstacles_se2_value;
     const auto value_total = attractor_se2_value + yaw_se2_value +
-                             map_obstacles_se2_value + aabb_obstacles_se2_value;
+    map_obstacles_se2_value + aabb_obstacles_se2_value;
     const auto f_total = value_total.f_;
     integrator.step(f_total);
 
@@ -399,6 +414,10 @@ void WaveriderServer::evaluateAndPublishPolicy() {
 void WaveriderServer::subscribeToTopics(ros::NodeHandle& nh) {
   robot_state_sub_ = nh.subscribe(config_.robot_state_topic, 1,
                                   &WaveriderServer::robotStateCallback, this);
+  ferrous_surfaces_sub_ =
+      nh.subscribe<tf2_msgs::TFMessage>(config_.ferrous_surfaces_topic, 1,
+                                        &WaveriderServer::ferrousSurfaceCallback,
+                                        this);
 
   {
     std::scoped_lock lock(aabb_lists_.mutex);
@@ -418,6 +437,49 @@ void WaveriderServer::subscribeToTopics(ros::NodeHandle& nh) {
     }
   }
 }
+
+void WaveriderServer::ferrousSurfaceCallback(
+    const tf2_msgs::TFMessage::ConstPtr& msg) {
+  ProfilerZoneScoped;
+  // Check that the ferrous surface message is valid
+  if (msg->transforms.empty()) {
+    ROS_WARN("Received empty ferrous surface message. Ignoring.");
+    return;
+  }
+
+  // Parse the ferrous surfaces
+  std::vector<Surface> ferrous_surfaces;
+
+  for (const auto& transform : msg->transforms) {
+    Surface surface;
+
+    // Extract position
+    surface.center = Vector{transform.transform.translation.x,
+                transform.transform.translation.y,
+                transform.transform.translation.z};
+
+    // Extract normal from quaternion (Z-axis of surface frame)
+    Eigen::Quaternionf quat(transform.transform.rotation.w,
+                transform.transform.rotation.x,
+                transform.transform.rotation.y,
+                transform.transform.rotation.z);
+
+    Eigen::Vector3f z_axis = quat.toRotationMatrix().col(2);
+    surface.normal = Vector{z_axis.x(), z_axis.y(), z_axis.z()};
+    surface.normal.normalize();
+
+    // Extract the last number following '_' from child_frame_id
+    size_t last_underscore_pos = transform.child_frame_id.find_last_of('_');
+    if (last_underscore_pos != std::string::npos) {
+      surface.surface_id = transform.child_frame_id.substr(last_underscore_pos + 1);
+    } else {
+      ROS_WARN("Failed to extract surface ID from child_frame_id: %s", transform.child_frame_id.c_str());
+      surface.surface_id = "unknown";  // Default to "unknown" if extraction fails
+    }
+
+    ferrous_surface_policy_.addSurface(surface.surface_id, surface);
+  }
+  };
 
 void WaveriderServer::parseAabbMsg(
     const std_msgs::Float32MultiArray& msg,

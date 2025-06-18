@@ -11,6 +11,7 @@
 #include <std_msgs/Float32MultiArray.h>
 #include <std_srvs/Empty.h>
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
+#include <tf2_msgs/TFMessage.h>
 #include <wavemap/core/config/config_base.h>
 #include <wavemap/core/config/string_list.h>
 #include <wavemap/core/config/value_with_unit.h>
@@ -18,6 +19,8 @@
 #include <wavemap_ros/utils/tf_transformer.h>
 #include <waverider/goal_policy.h>
 #include <waverider/goal_policy_tuning.h>
+#include <waverider/ferrous_surface_policy.h>
+#include <waverider/ferrous_surface_policy_tuning.h>
 #include <waverider/obstacle_list_policy.h>
 #include <waverider/waverider_policy.h>
 #include <waverider/yaw_policy.h>
@@ -30,12 +33,13 @@ using wavemap::StringList;
 using wavemap::ValueWithUnit;
 
 struct WaveriderServerConfig
-    : wavemap::ConfigBase<WaveriderServerConfig, 20, StringList,
-                          GoalPolicyTuning, YawPolicyTuning,
+    : wavemap::ConfigBase<WaveriderServerConfig, 23, StringList,
+                          GoalPolicyTuning, FerrousSurfacePolicyTuning, YawPolicyTuning,
                           ObstaclePolicyTuning> {
   std::string odom_frame = "odom";
 
   std::string robot_state_topic;
+  std::string ferrous_surfaces_topic;
   std::string twist_command_topic;
   StringList obstacle_aabb_topics;
 
@@ -52,10 +56,12 @@ struct WaveriderServerConfig
   int publish_debug_visuals_every_n_iterations = 20;
 
   GoalPolicyTuning goal_policy;
+  FerrousSurfacePolicyTuning ferrous_surfaces_policy;
   YawPolicyTuning yaw_policy;
   ObstaclePolicyTuning map_obstacles_policy;
   ObstaclePolicyTuning aabb_obstacles_policy;
   FloatingPoint goal_policy_marker_scale = 0.1f;
+  FloatingPoint ferrous_surface_policy_marker_scale = 0.1f;
   FloatingPoint yaw_policy_marker_scale = 0.1f;
   FloatingPoint map_obstacles_policy_marker_scale = 0.1f;
   FloatingPoint aabb_obstacles_policy_marker_scale = 0.1f;
@@ -87,6 +93,7 @@ class WaveriderServer {
 
   // Wavemap-based obstacle avoidance policy
   GoalPolicy goal_policy_;
+  FerrousSurfacePolicy ferrous_surface_policy_;
   YawPolicy yaw_policy_;
   WaveriderPolicy map_obstacles_policy_;
   ObstacleListPolicy aabb_obstacles_policy_;
@@ -107,6 +114,9 @@ class WaveriderServer {
     uint64_t time = 0u;
     std::mutex mutex;
   } robot_state_;
+
+  ros::Subscriber ferrous_surfaces_sub_;
+  void ferrousSurfaceCallback(const tf2_msgs::TFMessage::ConstPtr& msg);
 
   std::vector<ros::Subscriber> aabb_subs_;
   struct {

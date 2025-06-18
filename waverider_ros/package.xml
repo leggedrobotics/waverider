@@ -16,6 +16,7 @@
 
   <depend>magnecko_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>tf2_msgs</depend>
   <depend>roscpp</depend>
   <depend>std_srvs</depend>
   <depend>wavemap_ros</depend>
