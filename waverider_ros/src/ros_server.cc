@@ -17,6 +17,7 @@ DECLARE_CONFIG_MEMBERS(WaveriderServerConfig,
                       (robot_state_topic)
                       (twist_command_topic)
                       (ferrous_surfaces_topic)
+                      (surface_transform_topic)
                       (obstacle_aabb_topics)
                       (goal_tf_frame)
                       (ground_plane_tf_frame)
@@ -44,6 +45,7 @@ bool WaveriderServerConfig::isValid(bool verbose) const {
   all_valid &= IS_PARAM_NE(robot_state_topic, "", verbose);
   all_valid &= IS_PARAM_NE(twist_command_topic, "", verbose);
   all_valid &= IS_PARAM_NE(ferrous_surfaces_topic, "", verbose);
+  all_valid &= IS_PARAM_NE(surface_transform_topic, "", verbose);
   all_valid &= IS_PARAM_NE(goal_tf_frame, "", verbose);
   all_valid &= IS_PARAM_NE(ground_plane_tf_frame, "", verbose);
   all_valid &= IS_PARAM_GE(tf_lookup_delay, 0.f, verbose);
@@ -418,7 +420,10 @@ void WaveriderServer::subscribeToTopics(ros::NodeHandle& nh) {
       nh.subscribe<tf2_msgs::TFMessage>(config_.ferrous_surfaces_topic, 1,
                                         &WaveriderServer::ferrousSurfaceCallback,
                                         this);
-
+  surface_transform_sub_ =
+      nh.subscribe<geometry_msgs::TransformStamped>(
+          config_.surface_transform_topic, 1,
+          &WaveriderServer::surfaceTransformCallback, this);
   {
     std::scoped_lock lock(aabb_lists_.mutex);
     aabb_lists_.data.resize(config_.obstacle_aabb_topics.value.size());
@@ -480,6 +485,39 @@ void WaveriderServer::ferrousSurfaceCallback(
     ferrous_surface_policy_.addSurface(surface.surface_id, surface);
   }
   };
+
+void WaveriderServer::surfaceTransformCallback(
+    const boost::shared_ptr<const geometry_msgs::TransformStamped>& msg) {
+  ProfilerZoneScoped;
+  // Check that the surface transform is valid
+  if (msg->child_frame_id.empty()) {
+    ROS_WARN("Received empty surface transform. Ignoring.");
+    return;
+  }
+
+  active_surface_transform_ = *msg;
+}
+
+Eigen::Vector3d WaveriderServer::getCurrentSurfaceNormal() {
+  // Check if the active surface transform is set
+  if (active_surface_transform_.child_frame_id.empty()) {
+    ROS_WARN("Active surface transform not set. Cannot get current surface normal.");
+    return Eigen::Vector3d::UnitZ(); // Default to Z-axis if no transform is set
+  }
+
+    // Extract the normal from the active surface transform
+    Eigen::Quaternionf quat(active_surface_transform_.transform.rotation.w,
+                            active_surface_transform_.transform.rotation.x,
+                            active_surface_transform_.transform.rotation.y,
+                            active_surface_transform_.transform.rotation.z);
+    if (quat.norm() == 0.0f) {
+      ROS_WARN("Invalid quaternion in active surface transform. Cannot get current surface normal.");
+      return Eigen::Vector3d::UnitZ(); // Default to Z-axis if quaternion is invalid
+    }
+    quat.normalize(); // Ensure the quaternion is normalized
+    return quat.toRotationMatrix().col(2).cast<double>();
+  }
+
 
 void WaveriderServer::parseAabbMsg(
     const std_msgs::Float32MultiArray& msg,

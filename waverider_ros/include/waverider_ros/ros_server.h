@@ -12,6 +12,7 @@
 #include <std_srvs/Empty.h>
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
 #include <tf2_msgs/TFMessage.h>
+#include <geometry_msgs/TransformStamped.h>
 #include <wavemap/core/config/config_base.h>
 #include <wavemap/core/config/string_list.h>
 #include <wavemap/core/config/value_with_unit.h>
@@ -33,13 +34,14 @@ using wavemap::StringList;
 using wavemap::ValueWithUnit;
 
 struct WaveriderServerConfig
-    : wavemap::ConfigBase<WaveriderServerConfig, 23, StringList,
+    : wavemap::ConfigBase<WaveriderServerConfig, 24, StringList,
                           GoalPolicyTuning, FerrousSurfacePolicyTuning, YawPolicyTuning,
                           ObstaclePolicyTuning> {
   std::string odom_frame = "odom";
 
   std::string robot_state_topic;
   std::string ferrous_surfaces_topic;
+  std::string surface_transform_topic;
   std::string twist_command_topic;
   StringList obstacle_aabb_topics;
 
@@ -117,6 +119,11 @@ class WaveriderServer {
 
   ros::Subscriber ferrous_surfaces_sub_;
   void ferrousSurfaceCallback(const tf2_msgs::TFMessage::ConstPtr& msg);
+
+  ros::Subscriber surface_transform_sub_;
+  void surfaceTransformCallback(const boost::shared_ptr<const geometry_msgs::TransformStamped>& msg);
+  geometry_msgs::TransformStamped active_surface_transform_;
+  Eigen::Vector3d getCurrentSurfaceNormal();
 
   std::vector<ros::Subscriber> aabb_subs_;
   struct {

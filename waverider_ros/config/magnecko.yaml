@@ -2,6 +2,7 @@ odom_frame: "odom"
 robot_state_topic: "/magnecko_waverider_state"
 twist_command_topic: "/twist_mux/twist"
 ferrous_surfaces_topic: "/ferrous_surfaces"
+surface_transform_topic: "/surface_transform"
 obstacle_aabb_topics:
   - "/depth_camera_front_upper/aligned_depth_to_infra1/bboxes"
   - "/depth_camera_rear_upper/aligned_depth_to_infra1/bboxes"
