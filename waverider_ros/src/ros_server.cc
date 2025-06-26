@@ -76,6 +76,8 @@ WaveriderServer::WaveriderServer(ros::NodeHandle nh, ros::NodeHandle nh_private,
 
   // Configure goal policy
   goal_policy_.setTuning(config_.goal_policy);
+  // Configure 3D goal policy
+  goal_policy_3d_.setTuning(config_.goal_policy);
   // Configure ferrous surface policy
   ferrous_surface_policy_.setTuning(config_.ferrous_surfaces_policy);
   // Configure yaw policy
@@ -238,6 +240,7 @@ void WaveriderServer::evaluateAndPublishPolicy() {
       return;
     }
     goal_policy_.setTarget(goal_position->cast<double>());
+    goal_policy_3d_.setTarget(goal_position->cast<double>());
 
     float yaw;
     if (config_.yaw_policy.track_yaw_goal) {
@@ -251,23 +254,46 @@ void WaveriderServer::evaluateAndPublishPolicy() {
     yaw_policy_.setTarget(goal_position->cast<double>(), static_cast<double>(yaw));
   }
 
-  // Forward integrate the state and policy to obtain velocity reference
+  // Retrieve the current surface normal
+  const Eigen::Vector3d surface_normal = getCurrentSurfaceNormal();
+
+  // Forward integrate the robot state using the surface-aligned approach
   auto propagated_state = SE3toSE2(current_state);
   const double yaw_init = propagated_state.pos_.z();
   const double yaw_dot_init = propagated_state.vel_.z();
+
   rmpcpp::TrapezoidalIntegrator integrator{propagated_state,
                                            config_.integrator_step_size};
   const int num_integrator_steps =
       std::ceil(config_.control_period / config_.integrator_step_size);
+
   for (int step_idx = 0; step_idx < num_integrator_steps; ++step_idx) {
+
     // Reconstruct R3 state
     auto propagated_state_r3 = R3toSE2{}.convertToQ(propagated_state);
     propagated_state_r3.pos_.z() = current_state.p().z();
     propagated_state_r3.vel_.z() = current_state.v().z();
     propagated_state_r3.acc_.z() = current_state.a().z();
 
-    // Evaluate the goal attraction policy
-    auto attractor_r3_value = goal_policy_.evaluateAt(propagated_state_r3);
+    auto original_attractor_r3_value = goal_policy_.evaluateAt(propagated_state_r3);
+    auto original_attractor_se2_value = R3toSE2{}.at(propagated_state_r3).pull(original_attractor_r3_value);
+
+    rmpcpp::PolicyBase<rmpcpp::Space<3>>::PValue attractor_r3_value = [&]() {
+      if (use_3d_rmp_) {
+        // Use 3D goal policy
+        auto value_3d = goal_policy_3d_.evaluateAt(propagated_state_r3);
+        
+        // Optionally project to active surface
+        if (use_surface_projection_ && !active_surface_transform_.child_frame_id.empty()) {
+          return SurfaceProjector::projectToSurface(value_3d, active_surface_transform_);
+        }
+        return value_3d;
+      } else {
+        // Use existing 2D policy
+        return goal_policy_.evaluateAt(propagated_state_r3);
+      }
+    }();
+    
     auto attractor_se2_value =
         R3toSE2{}.at(propagated_state_r3).pull(attractor_r3_value);
 
@@ -280,17 +306,13 @@ void WaveriderServer::evaluateAndPublishPolicy() {
     // Evaluate the yaw policy
     auto yaw_se2_value = yaw_policy_.evaluateAt(propagated_state);
 
-    // Evaluate the static obstacle avoidance policy
-    auto map_obstacles_r3_value =
-        map_obstacles_policy_.evaluateAt(propagated_state_r3);
-    auto map_obstacles_se2_value =
-        R3toSE2{}.at(propagated_state_r3).pull(map_obstacles_r3_value);
+    auto map_obstacles_r3_value = map_obstacles_policy_.evaluateAt(propagated_state_r3);
+    auto map_obstacles_se2_value = R3toSE2{}.at(propagated_state_r3).pull(
+        map_obstacles_r3_value);
 
-    // Evaluate the dynamic obstacle avoidance policy
-    auto aabb_obstacles_r3_value =
-        aabb_obstacles_policy_.evaluateAt(propagated_state_r3);
-    auto aabb_obstacles_se2_value =
-        R3toSE2{}.at(propagated_state_r3).pull(aabb_obstacles_r3_value);
+    auto aabb_obstacles_r3_value = aabb_obstacles_policy_.evaluateAt(propagated_state_r3);
+    auto aabb_obstacles_se2_value = R3toSE2{}.at(propagated_state_r3).pull(
+        aabb_obstacles_r3_value);
 
     // Apply the policies by integrating their commanded accelerations
     // const auto value_total = attractor_se2_value + ferrous_surface_se2_value + yaw_se2_value +
@@ -325,20 +347,83 @@ void WaveriderServer::evaluateAndPublishPolicy() {
                               map_frame_, "v_yaw", 0.f, 0.f, 1.f));
         }
         {
-          const Vector3D f_goal_r2 =
-              config_.goal_policy_marker_scale *
-              Vector3D{static_cast<float>(attractor_se2_value.f_.x()),
-                       static_cast<float>(attractor_se2_value.f_.y()), 0.f};
-          marker_array.markers.emplace_back(
-              commandToMarker(current_state.p().cast<float>(), f_goal_r2,
-                              map_frame_, "f_goal_r2", 0.f, 1.f, 0.f));
-          const Vector3D f_goal_yaw =
-              config_.goal_policy_marker_scale *
-              Vector3D{0.f, 0.f,
-                       static_cast<float>(attractor_se2_value.f_.z())};
-          marker_array.markers.emplace_back(
-              commandToMarker(current_state.p().cast<float>(), f_goal_yaw,
-                              map_frame_, "f_goal_yaw", 0.f, 1.f, 0.f));
+          if (use_3d_rmp_) {
+            // === 3D RMP DEBUG VISUALS ===
+            
+            // 1. GRAY: Goal error vector (shows spatial relationship)
+            Vector3D goal_error = (goal_policy_3d_.target() - propagated_state_r3.pos_).cast<float>();
+            const Vector3D f_goal_error = 0.3f * config_.goal_policy_marker_scale * goal_error;
+            marker_array.markers.emplace_back(
+                commandToMarker(current_state.p().cast<float>(), f_goal_error,
+                                map_frame_, "f_goal_error", 0.5f, 0.5f, 0.5f)); // Gray
+            
+            // 2. BLUE: Original 3D force (natural goal attraction in free space)
+            auto original_3d_force = goal_policy_3d_.evaluateAt(propagated_state_r3);
+            const Vector3D f_goal_3d_original = 
+                config_.goal_policy_marker_scale *
+                Vector3D{static_cast<float>(original_3d_force.f_.x()),
+                         static_cast<float>(original_3d_force.f_.y()),
+                         static_cast<float>(original_3d_force.f_.z())};
+            marker_array.markers.emplace_back(
+                commandToMarker(current_state.p().cast<float>(), f_goal_3d_original,
+                                map_frame_, "f_goal_3d_original", 0.0f, 0.0f, 1.0f)); // Blue
+            
+            // 3. GREEN: Final projected force (what robot actually uses)
+            const Vector3D f_goal_projected_r3 = 
+                config_.goal_policy_marker_scale *
+                Vector3D{static_cast<float>(attractor_r3_value.f_.x()),
+                         static_cast<float>(attractor_r3_value.f_.y()),
+                         static_cast<float>(attractor_r3_value.f_.z())};
+            marker_array.markers.emplace_back(
+                commandToMarker(current_state.p().cast<float>(), f_goal_projected_r3,
+                                map_frame_, "f_goal_projected_r3", 0.0f, 1.0f, 0.0f)); // Green
+            
+            // 4. MAGENTA: Surface normal (shows surface orientation)
+            if (use_surface_projection_ && !active_surface_transform_.child_frame_id.empty()) {
+              const Vector3D f_surface_normal = 
+                  0.5f * config_.goal_policy_marker_scale *
+                  Vector3D{static_cast<float>(surface_normal.x()),
+                           static_cast<float>(surface_normal.y()),
+                           static_cast<float>(surface_normal.z())};
+              marker_array.markers.emplace_back(
+                  commandToMarker(current_state.p().cast<float>(), f_surface_normal,
+                                  map_frame_, "f_surface_normal", 1.0f, 0.0f, 1.0f)); // Magenta
+            }
+            
+            // 5. CYAN: SE2 projected force (for comparison with existing system)
+            const Vector3D f_goal_se2_r2 =
+                config_.goal_policy_marker_scale *
+                Vector3D{static_cast<float>(attractor_se2_value.f_.x()),
+                         static_cast<float>(attractor_se2_value.f_.y()), 0.f};
+            marker_array.markers.emplace_back(
+                commandToMarker(current_state.p().cast<float>(), f_goal_se2_r2,
+                                map_frame_, "f_goal_se2_r2", 0.0f, 1.0f, 1.0f)); // Cyan
+            
+            const Vector3D f_goal_se2_yaw =
+                config_.goal_policy_marker_scale *
+                Vector3D{0.f, 0.f,
+                         static_cast<float>(attractor_se2_value.f_.z())};
+            marker_array.markers.emplace_back(
+                commandToMarker(current_state.p().cast<float>(), f_goal_se2_yaw,
+                                map_frame_, "f_goal_se2_yaw", 0.0f, 1.0f, 1.0f)); // Cyan
+                                
+          } else {
+            // === 2D RMP DEBUG VISUALS (existing) ===
+            const Vector3D f_goal_r2 =
+                config_.goal_policy_marker_scale *
+                Vector3D{static_cast<float>(attractor_se2_value.f_.x()),
+                         static_cast<float>(attractor_se2_value.f_.y()), 0.f};
+            marker_array.markers.emplace_back(
+                commandToMarker(current_state.p().cast<float>(), f_goal_r2,
+                                map_frame_, "f_goal_r2", 0.f, 1.f, 0.f)); // Green
+            const Vector3D f_goal_yaw =
+                config_.goal_policy_marker_scale *
+                Vector3D{0.f, 0.f,
+                         static_cast<float>(attractor_se2_value.f_.z())};
+            marker_array.markers.emplace_back(
+                commandToMarker(current_state.p().cast<float>(), f_goal_yaw,
+                                map_frame_, "f_goal_yaw", 0.f, 1.f, 0.f)); // Green
+          }
         }
         {
           const Vector3D f_yaw_r2 =
@@ -581,4 +666,5 @@ std::optional<Plane3D> WaveriderServer::getGroundPlaneFromTf() {
   }
   return std::nullopt;
 }
+
 }  // namespace waverider

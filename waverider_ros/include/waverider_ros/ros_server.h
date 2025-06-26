@@ -20,6 +20,7 @@
 #include <wavemap_ros/utils/tf_transformer.h>
 #include <waverider/goal_policy.h>
 #include <waverider/goal_policy_tuning.h>
+#include <waverider/goal_policy_3d.h>
 #include <waverider/ferrous_surface_policy.h>
 #include <waverider/ferrous_surface_policy_tuning.h>
 #include <waverider/obstacle_list_policy.h>
@@ -95,10 +96,15 @@ class WaveriderServer {
 
   // Wavemap-based obstacle avoidance policy
   GoalPolicy goal_policy_;
+  GoalPolicy3D goal_policy_3d_;
   FerrousSurfacePolicy ferrous_surface_policy_;
   YawPolicy yaw_policy_;
   WaveriderPolicy map_obstacles_policy_;
   ObstacleListPolicy aabb_obstacles_policy_;
+
+  // Additional configuration parameters for GoalPolicy3D
+  bool use_3d_rmp_ = true;
+  bool use_surface_projection_ = true;
 
   // Asynchronous policy publishing logic
   std::atomic<bool> continue_async_planning_{false};

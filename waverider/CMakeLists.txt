@@ -7,6 +7,7 @@ catkin_simple(ALL_DEPS_REQUIRED)
 # Libraries
 cs_add_library(${PROJECT_NAME}
     src/goal_policy.cc
+    src/goal_policy_3d.cc
     src/goal_policy_tuning.cc
     src/ferrous_surface_policy.cc
     src/ferrous_surface_policy_tuning.cc
