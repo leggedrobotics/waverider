@@ -21,9 +21,9 @@
     z: 2.0
   quaternion:
     x: 0.0
-    y: 0.0
+    y: -0.7071068
     z: 0.0
-    w: 1.0
+    w: 0.7071068
 
 - parent_frame: "chassis"
   child_frame: "camera_link"
